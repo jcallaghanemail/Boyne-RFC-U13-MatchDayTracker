@@ -192,8 +192,8 @@
   .chev{color:var(--ink-soft); font-size:12px; transition:transform 0.15s;}
   .event-card.open .chev{transform:rotate(90deg);}
 
-  .event-body{max-height:0; overflow:hidden; transition:max-height 0.25s ease;}
-  .event-card.open .event-body{max-height:900px;}
+  .event-body{display:none; overflow:visible;}
+  .event-card.open .event-body{display:block; max-height:none; overflow:visible;}
   .event-body-inner{padding:0 16px 16px; border-top:1px dashed var(--line); padding-top:14px;}
   .fixture-admin{margin-top:18px;padding-top:14px;border-top:1px dashed var(--line);}
   .delete-fixture-btn{width:100%;border:1px solid var(--no);background:#fff;color:var(--no);border-radius:8px;padding:10px;font-family:'Oswald';font-size:12px;font-weight:700;cursor:pointer;}
