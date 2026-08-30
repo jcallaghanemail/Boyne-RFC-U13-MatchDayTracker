@@ -200,6 +200,9 @@
   .event-body-inner{padding:0 16px 16px; border-top:1px dashed var(--line); padding-top:14px;}
   .fixture-admin{margin-top:18px;padding-top:14px;border-top:1px dashed var(--line);}
   .delete-fixture-btn{width:100%;border:1px solid var(--no);background:#fff;color:var(--no);border-radius:8px;padding:10px;font-family:'Oswald';font-size:12px;font-weight:700;cursor:pointer;}
+  .archive-training-btn{width:100%;border:1px solid var(--pitch-mid);background:var(--pitch-mid);color:#fff;border-radius:8px;padding:10px;font-family:'Oswald';font-size:12px;font-weight:700;cursor:pointer;margin-bottom:8px;}
+  .archive-training-btn.restore{background:#fff;color:var(--pitch-mid);}
+  .archived-badge{display:inline-block;margin-top:5px;padding:3px 7px;border-radius:9px;background:#E7E4DC;color:var(--ink-soft);font-size:10px;font-weight:700;text-transform:uppercase;}
 
   /* Scoreboard */
   .scoreboard{
@@ -1067,7 +1070,7 @@
       }
       body += `</div><div class="rsvp-count">${coachGoingCount} confirmed going</div></div>`;
       }
-      if(role === 'coach') body += `<div class="fixture-admin"><button class="delete-fixture-btn" data-delete-event="${ev.id}">Delete ${ev.type === 'match' ? 'Fixture' : 'Training'}</button></div>`;
+      if(role === 'coach') body += `<div class="fixture-admin">${ev.type === 'training' && isHistoryEvent(ev) ? `<button class="archive-training-btn ${ev.archived ? 'restore' : ''}" data-archive-training="${ev.id}">${ev.archived ? 'Restore Training' : 'Archive Training'}</button>` : ''}<button class="delete-fixture-btn" data-delete-event="${ev.id}">Delete ${ev.type === 'match' ? 'Fixture' : 'Training'}</button></div>`;
       body += `</div>`;
     }
 
@@ -1092,6 +1095,7 @@
             <div class="event-title">${escapeHtml(ev.title)}</div>
             <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}</div>
             ${safeMapUrl(ev.mapLink) ? `<a class="map-link" href="${escapeAttr(safeMapUrl(ev.mapLink))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">View in Google Maps</a>` : ''}
+            ${ev.archived ? '<span class="archived-badge">Archived</span>' : ''}
             ${summaryHtml}
           </div>
           <div class="event-right">
@@ -1119,14 +1123,24 @@
   }
   async function renderHistory(){
     const el = document.getElementById('history-content');
-    const history = events.filter(isHistoryEvent).slice().sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
-    if(!history.length){
+    const allHistory = events.filter(isHistoryEvent).slice().sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
+    const history = allHistory.filter(ev => !(ev.type === 'training' && ev.archived));
+    const archivedTraining = role === 'coach' ? allHistory.filter(ev => ev.type === 'training' && ev.archived) : [];
+    if(!history.length && !archivedTraining.length){
       el.innerHTML = `<div class="empty-state"><div class="big">No history yet</div><div>Past fixtures and matches marked Final will appear here automatically.</div></div>`;
       return;
     }
-    let html = `<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Fixture & Result History</div><div class="list" style="padding:0;">`;
-    for(const ev of history) html += await renderCard(ev);
-    html += `</div>`;
+    let html = '';
+    if(history.length){
+      html += `<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Fixture & Result History</div><div class="list" style="padding:0;">`;
+      for(const ev of history) html += await renderCard(ev);
+      html += `</div>`;
+    }
+    if(archivedTraining.length){
+      html += `<div class="section-label" style="margin:24px 0 12px;"><span class="num">•</span> Archived Training</div><div class="list" style="padding:0;">`;
+      for(const ev of archivedTraining) html += await renderCard(ev);
+      html += `</div>`;
+    }
     el.innerHTML = html;
     attachCardHandlers();
   }
@@ -1297,6 +1311,21 @@
         }
         await saveCheckin(evId);
         showToast(isIn ? player + ' checked in' : player + ' check-in removed');
+        await render();
+      });
+    });
+    document.querySelectorAll('[data-archive-training]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if(role !== 'coach') return;
+        const evId = btn.getAttribute('data-archive-training');
+        const ev = events.find(item => item.id === evId);
+        if(!ev || ev.type !== 'training' || !isHistoryEvent(ev)) return;
+        ev.archived = !ev.archived;
+        ev.archivedAt = ev.archived ? new Date().toISOString() : null;
+        await saveEvents();
+        if(openEventId === evId) openEventId = null;
+        showToast(ev.archived ? 'Training archived' : 'Training restored');
         await render();
       });
     });
