@@ -102,6 +102,11 @@
   .training-summary-group{margin-top:8px;}
   .training-summary-label{font-size:11px;font-weight:700;margin-bottom:4px;}
   .training-summary-names{font-size:11.5px;line-height:1.45;color:var(--ink-soft);}
+  .training-history-detail{margin:0 0 14px;padding:12px;background:#EEF5F0;border:1px solid #B8D0C0;border-radius:10px;}
+  .training-history-list{display:grid;gap:6px;margin-top:8px;}
+  .training-history-player{display:flex;align-items:center;gap:8px;padding:7px 9px;background:#fff;border:1px solid var(--line);border-radius:7px;font-size:12px;font-weight:700;}
+  .training-history-player.attended{color:var(--going);}
+  .training-history-player.absent{color:var(--no);}
   .selection-fixture{background:var(--card); border:1px solid var(--line); border-radius:12px; margin-bottom:12px; overflow:hidden;}
   .selection-fixture-head{padding:13px 14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px;}
   .selection-fixture-title{font-weight:700; font-size:14px;}
@@ -873,12 +878,22 @@
         const trainingGoing = Object.entries(rs || {}).filter(([,v]) => v.status === 'going').map(([n]) => n);
         const trainingMaybe = Object.entries(rs || {}).filter(([,v]) => v.status === 'maybe').map(([n]) => n);
         const trainingNo = Object.entries(rs || {}).filter(([,v]) => v.status === 'no').map(([n]) => n);
-        body += `<div class="training-summary"><div class="training-summary-title">Training Attendance Summary</div>
-          <div class="checkin-summary"><span class="checkin-chip in">${trainingGoing.length} going</span><span class="checkin-chip">${trainingMaybe.length} unsure</span><span class="checkin-chip missing">${trainingNo.length} not going</span></div>
-          <div class="training-summary-group"><div class="training-summary-label">Going</div><div class="training-summary-names">${trainingGoing.length ? trainingGoing.map(escapeHtml).join(', ') : 'No players confirmed yet'}</div></div>
-          <div class="training-summary-group"><div class="training-summary-label">Unsure</div><div class="training-summary-names">${trainingMaybe.length ? trainingMaybe.map(escapeHtml).join(', ') : 'None'}</div></div>
-          <div class="training-summary-group"><div class="training-summary-label">Not Going</div><div class="training-summary-names">${trainingNo.length ? trainingNo.map(escapeHtml).join(', ') : 'None'}</div></div>
-        </div>`;
+        const trainingAttended = roster.filter(n => checkins[n] && checkins[n].checkedIn);
+        const trainingAbsent = trainingGoing.filter(n => !checkins[n] || !checkins[n].checkedIn);
+        if(isHistoryEvent(ev)){
+          body += `<div class="training-history-detail"><div class="training-summary-title">Training Attendance History</div>
+            <div class="checkin-summary"><span class="checkin-chip">${trainingGoing.length} expected</span><span class="checkin-chip in">${trainingAttended.length} attended</span><span class="checkin-chip missing">${trainingAbsent.length} absent</span></div>
+            ${role === 'coach' ? `<div class="training-summary-group"><div class="training-summary-label">Attended Players</div><div class="training-history-list">${trainingAttended.length ? trainingAttended.map(n => `<div class="training-history-player attended"><span>✓</span><span>${escapeHtml(n)}</span></div>`).join('') : '<div class="training-summary-names">No players were checked in.</div>'}</div></div>
+            <div class="training-summary-group"><div class="training-summary-label">Absent Players</div><div class="training-history-list">${trainingAbsent.length ? trainingAbsent.map(n => `<div class="training-history-player absent"><span>✕</span><span>${escapeHtml(n)}</span></div>`).join('') : '<div class="training-summary-names">No expected players were absent.</div>'}</div></div>` : '<div class="training-summary-names">Individual attendance details are available to coaches only.</div>'}
+          </div>`;
+        }else{
+          body += `<div class="training-summary"><div class="training-summary-title">Training Attendance Summary</div>
+            <div class="checkin-summary"><span class="checkin-chip in">${trainingGoing.length} going</span><span class="checkin-chip">${trainingMaybe.length} unsure</span><span class="checkin-chip missing">${trainingNo.length} not going</span></div>
+            <div class="training-summary-group"><div class="training-summary-label">Going</div><div class="training-summary-names">${trainingGoing.length ? trainingGoing.map(escapeHtml).join(', ') : 'No players confirmed yet'}</div></div>
+            <div class="training-summary-group"><div class="training-summary-label">Unsure</div><div class="training-summary-names">${trainingMaybe.length ? trainingMaybe.map(escapeHtml).join(', ') : 'None'}</div></div>
+            <div class="training-summary-group"><div class="training-summary-label">Not Going</div><div class="training-summary-names">${trainingNo.length ? trainingNo.map(escapeHtml).join(', ') : 'None'}</div></div>
+          </div>`;
+        }
       }
 
       if(ev.type === 'match' && sc && (role === 'coach' || sc.status === 'live' || sc.status === 'final')){
@@ -943,8 +958,8 @@
       const entries = Object.entries(rsvpData);
       const goingCount = entries.filter(([,v]) => v.status === 'going').length;
       const liveForParent = role === 'parent' && ev.type === 'match' && sc && sc.status === 'live';
-      const privateAttendanceForParent = role === 'parent' && ev.type === 'match' && (liveForParent || isHistoryEvent(ev));
-      if(role === 'coach'){
+      const privateAttendanceForParent = role === 'parent' && ((ev.type === 'match' && (liveForParent || isHistoryEvent(ev))) || (ev.type === 'training' && isHistoryEvent(ev)));
+      if(role === 'coach' && !(ev.type === 'training' && isHistoryEvent(ev))){
         const expected = roster.filter(n => rsvpData[n] && rsvpData[n].status === 'going');
         const checkedNames = expected.filter(n => checkins[n] && checkins[n].checkedIn);
         const missingNames = expected.filter(n => !checkins[n] || !checkins[n].checkedIn);
@@ -955,7 +970,7 @@
         </div>`;
       }
       if(privateAttendanceForParent){
-        body += `<div class="rsvp-closed">${liveForParent ? 'The match is LIVE.' : 'This match is in History.'} Player and coach attendance lists are private to coaches.</div>`;
+        body += `<div class="rsvp-closed">${liveForParent ? 'The match is LIVE.' : 'This event is in History.'} Individual player and coach attendance details are private to coaches.</div>`;
       }else{
       body += `<div class="rsvp-block">
         <div class="rsvp-title">Players</div>`;
