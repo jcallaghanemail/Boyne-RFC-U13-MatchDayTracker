@@ -422,10 +422,33 @@
 
 <script>
 (function(){
-  // Storage adapter for a standalone HTML file opened in Chrome.
+  // Shared storage through the Azure Functions API.
   const STORE = {
-    async get(key){ return { value: localStorage.getItem(key) }; },
-    async set(key, value){ localStorage.setItem(key, value); return true; }
+    async get(key){
+      const response = await fetch('/api/store?key=' + encodeURIComponent(key), {
+        method: 'GET',
+        cache: 'no-store'
+      });
+      if(!response.ok) throw new Error('Unable to load shared data');
+      return await response.json();
+    },
+    async set(key, value){
+      const response = await fetch('/api/store', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value })
+      });
+      if(!response.ok) throw new Error('Unable to save shared data');
+      return true;
+    },
+    async remove(key){
+      const response = await fetch('/api/store?key=' + encodeURIComponent(key), {
+        method: 'DELETE',
+        cache: 'no-store'
+      });
+      if(!response.ok) throw new Error('Unable to delete shared data');
+      return true;
+    }
   };
   let role = 'parent';
   let events = [];
@@ -458,15 +481,42 @@
 
   async function safeGet(key, shared){
     try{
-      const r = await STORE.get(key, shared);
+      if(!shared) return localStorage.getItem(key);
+      const r = await STORE.get(key);
       return r ? r.value : null;
-    }catch(e){ return null; }
+    }catch(e){
+      console.error('Load failed for:', key, e);
+      showToast('Could not load shared data');
+      return null;
+    }
   }
   async function safeSet(key, value, shared){
     try{
-      const r = await STORE.set(key, value, shared);
-      return !!r;
-    }catch(e){ showToast('Could not save — try again'); return false; }
+      if(!shared){
+        localStorage.setItem(key, value);
+        return true;
+      }
+      await STORE.set(key, value);
+      return true;
+    }catch(e){
+      console.error('Save failed for:', key, e);
+      showToast('Could not save shared data');
+      return false;
+    }
+  }
+  async function safeRemove(key, shared){
+    try{
+      if(!shared){
+        localStorage.removeItem(key);
+        return true;
+      }
+      await STORE.remove(key);
+      return true;
+    }catch(e){
+      console.error('Delete failed for:', key, e);
+      showToast('Could not delete shared data');
+      return false;
+    }
   }
 
   async function loadRoster(){
@@ -1136,7 +1186,12 @@
 This permanently removes the fixture or training, RSVPs, score, clock and team selection.`)) return;
         events = events.filter(item => item.id !== evId);
         await saveEvents();
-        ['rsvp-', 'coach-rsvp-', 'score-', 'team-'].forEach(prefix => localStorage.removeItem(prefix + evId));
+        await Promise.all([
+          safeRemove('rsvp-' + evId, true),
+          safeRemove('coach-rsvp-' + evId, true),
+          safeRemove('score-' + evId, true),
+          safeRemove('team-' + evId, true)
+        ]);
         delete rsvpCache[evId]; delete coachRsvpCache[evId]; delete scoreCache[evId]; delete teamCache[evId];
         if(openEventId === evId) openEventId = null;
         if(selectionEventId === evId) selectionEventId = null;
@@ -1326,11 +1381,23 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     await loadCoachRoster();
     if(openEventId){
       const ev = events.find(e => e.id === openEventId);
-      if(ev && ev.type === 'match') await loadScore(openEventId);
-      await loadRsvp(openEventId);
-      await loadCoachRsvp(openEventId);
+      if(ev){
+        await loadRsvp(openEventId);
+        await loadCoachRsvp(openEventId);
+        if(ev.type === 'match'){
+          await loadScore(openEventId);
+          await loadTeam(openEventId);
+        }
+      }
     }
-    render();
+    if(role === 'coach' && activeTab === 'selection'){
+      for(const ev of events.filter(e => e.type === 'match')){
+        await loadRsvp(ev.id);
+        await loadCoachRsvp(ev.id);
+        await loadTeam(ev.id);
+      }
+    }
+    await render();
   }
 
   (async function init(){
@@ -1342,7 +1409,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     loaded = true;
     render();
     setInterval(updateVisibleClocks, 1000);
-    // No shared-data polling required for this standalone local version.
+    setInterval(refreshLive, 10000);
   })();
 })();
 </script>
