@@ -67,6 +67,7 @@
     padding:6px 12px; border-radius:16px; cursor:pointer; font-size:12px; font-weight:600;
   }
   .role-toggle button.active{background:var(--mud); opacity:1; color:#fff;}
+  body.parent-only .role-toggle{display:none;}
 
   .child-strip{margin-top:16px; font-size:12px; font-weight:700; color:var(--mud);}
   .child-strip select, .child-strip input{
@@ -479,7 +480,9 @@
       return true;
     }
   };
-  let role = 'parent';
+  const PORTAL_MODE = new URLSearchParams(window.location.search).get('portal');
+  const PARENT_ONLY = PORTAL_MODE === 'parent';
+  let role = PARENT_ONLY ? 'parent' : 'parent';
   let events = [];
   let rsvpCache = {}; // eventId -> data
   let scoreCache = {}; // eventId -> data
@@ -798,6 +801,8 @@
   function statusClass(s){ return s === 'going' ? 'g' : s === 'maybe' ? 'm' : 'n'; }
 
   async function render(){
+    document.body.classList.toggle('parent-only', PARENT_ONLY);
+    if(PARENT_ONLY){ role = 'parent'; if(!['fixtures','history'].includes(activeTab)) activeTab = 'fixtures'; }
     renderChildStrip();
     document.getElementById('role-parent').classList.toggle('active', role === 'parent');
     document.getElementById('role-coach').classList.toggle('active', role === 'coach');
@@ -1365,7 +1370,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
 
   // Role toggle and coach navigation
   document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history'].includes(activeTab)) activeTab='fixtures'; render(); });
-  document.getElementById('role-coach').addEventListener('click', () => { role = 'coach'; render(); });
+  document.getElementById('role-coach').addEventListener('click', () => { if(PARENT_ONLY) return; role = 'coach'; render(); });
   document.querySelectorAll('.app-tab').forEach(btn => btn.addEventListener('click', () => { activeTab=btn.getAttribute('data-tab'); openEventId=null; render(); }));
 
   // Roster management (coach)
