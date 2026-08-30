@@ -869,7 +869,7 @@
       body = `<div class="event-body-inner">`;
       if(team && team.published){ body += renderPublishedTeam(team); }
 
-      if(ev.type === 'match' && sc){
+      if(ev.type === 'match' && sc && (role === 'coach' || sc.status === 'live' || sc.status === 'final')){
         body += `
           <div class="scoreboard">
             <div class="sb-team"><div class="sb-name">${escapeHtml(sc.homeName)}</div><div class="sb-score">${sc.home}</div></div>
