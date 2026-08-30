@@ -81,7 +81,19 @@
   .app-tab.active{background:var(--pitch-deep); color:#fff; border-color:var(--pitch-deep);}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
-  .selection-page{padding:16px;}
+  .selection-page,.history-page{padding:16px;}
+  .checkin-panel{margin:14px 0;padding:12px;background:#EEF5F0;border:1px solid #B8D0C0;border-radius:10px;}
+  .checkin-title{font-family:'Oswald';font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--pitch-deep);margin-bottom:8px;}
+  .checkin-summary{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .checkin-chip{padding:5px 8px;border-radius:12px;font-size:11px;font-weight:700;background:#fff;border:1px solid var(--line);}
+  .checkin-chip.in{background:var(--going-bg);color:var(--going);border-color:#A9D4B7;}
+  .checkin-chip.missing{background:var(--no-bg);color:var(--no);border-color:#E2B2AC;}
+  .checkin-list{display:grid;gap:6px;}
+  .checkin-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;background:#fff;border:1px solid var(--line);border-radius:8px;font-size:12px;font-weight:700;}
+  .checkin-btn{border:1px solid var(--going);background:#fff;color:var(--going);border-radius:7px;padding:6px 9px;font-family:'Oswald';font-size:11px;font-weight:700;cursor:pointer;}
+  .checkin-btn.checked{background:var(--going);color:#fff;}
+  .missing-list{margin-top:9px;padding-top:8px;border-top:1px dashed var(--line);font-size:11px;color:var(--no);}
+  .history-result{font-family:'JetBrains Mono';font-size:13px;font-weight:700;color:var(--pitch-deep);margin-top:4px;}
   .selection-fixture{background:var(--card); border:1px solid var(--line); border-radius:12px; margin-bottom:12px; overflow:hidden;}
   .selection-fixture-head{padding:13px 14px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px;}
   .selection-fixture-title{font-weight:700; font-size:14px;}
@@ -350,6 +362,7 @@
     <button class="app-tab active" data-tab="fixtures">Fixtures</button>
     <button class="app-tab" data-tab="squad">Squad</button>
     <button class="app-tab" data-tab="selection">Selection</button>
+    <button class="app-tab" data-tab="history">History</button>
   </div>
 
   <div id="content">
@@ -411,10 +424,19 @@
         <label>Google Maps link</label>
         <input id="f-map-link" type="url" inputmode="url" placeholder="Paste a Google Maps link">
       </div>
+      <div id="f-result-wrap" style="display:none;">
+        <label>Historical result (optional)</label>
+        <div class="form-row">
+          <div><input id="f-home-score" type="number" min="0" inputmode="numeric" placeholder="Boyne score"></div>
+          <div><input id="f-away-score" type="number" min="0" inputmode="numeric" placeholder="Opponent score"></div>
+        </div>
+        <div style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;">Enter both scores to save the match directly as Full Time in History.</div>
+      </div>
       <button class="primary-btn" id="f-submit">Save to schedule</button>
     </div>
   </div>
   <div class="selection-page" id="selection-content" style="display:none;"></div>
+  <div class="history-page" id="history-content" style="display:none;"></div>
 
 </div>
 
@@ -465,6 +487,7 @@
   let selectionEventId = null;
   let selectedPitchSlot = null;
   let teamCache = {};
+  let checkinCache = {}; // eventId -> { playerName: {checkedIn, updatedAt} }
 
   const POINTS = { Try:5, Con:2, Pen:3, DG:3 };
   const LABELS = { Try:'Try', Con:'Conversion', Pen:'Penalty', DG:'Drop Goal' };
@@ -599,6 +622,14 @@
     await safeSet('team-' + eventId, JSON.stringify(teamCache[eventId]), true);
   }
 
+  async function loadCheckin(eventId){
+    const v = await safeGet('checkin-' + eventId, true);
+    checkinCache[eventId] = v ? JSON.parse(v) : {};
+    return checkinCache[eventId];
+  }
+  async function saveCheckin(eventId){
+    await safeSet('checkin-' + eventId, JSON.stringify(checkinCache[eventId] || {}), true);
+  }
   async function loadScore(eventId){
     const v = await safeGet('score-' + eventId, true);
     const sc = v ? JSON.parse(v) : { homeName:'Boyne RFC U13', awayName:'Opposition', home:0, away:0, log:[], status:'scheduled' };
@@ -674,6 +705,11 @@
     }catch(e){ return ''; }
   }
 
+  function isCompletedMatch(ev){
+    const sc = scoreCache[ev.id];
+    return ev.type === 'match' && sc && sc.status === 'final';
+  }
+  function isHistoryEvent(ev){ return isPast(ev) || isCompletedMatch(ev); }
   function isPast(ev){
     try{
       const dt = new Date(ev.date + 'T' + (ev.time || '23:59'));
@@ -763,11 +799,13 @@
     document.querySelectorAll('.app-tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === activeTab));
     document.getElementById('content').style.display = activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('selection-content').style.display = role === 'coach' && activeTab === 'selection' ? 'block' : 'none';
+    document.getElementById('history-content').style.display = role === 'coach' && activeTab === 'history' ? 'block' : 'none';
     document.getElementById('add-event-card').style.display = role === 'coach' && activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     document.getElementById('coach-roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     if(role === 'coach'){ renderRosterChips(); renderCoachRosterChips(); }
     if(role === 'coach' && activeTab === 'selection') await renderSelection();
+    if(role === 'coach' && activeTab === 'history') await renderHistory();
 
     const content = document.getElementById('content');
     if(!loaded){
@@ -783,19 +821,14 @@
       return;
     }
 
-    const upcoming = events.filter(e => !isPast(e));
-    const past = events.filter(e => isPast(e));
-
+    const upcoming = events.filter(e => !isHistoryEvent(e));
     let html = '';
     if(upcoming.length){
       html += `<div class="section-label"><span class="num">01</span> Next Up</div><div class="pitch-rule"></div><div class="list">`;
       for(const ev of upcoming) html += await renderCard(ev);
       html += `</div>`;
-    }
-    if(past.length){
-      html += `<div class="section-label"><span class="num">02</span> Played</div><div class="pitch-rule"></div><div class="list">`;
-      for(const ev of past.slice().reverse()) html += await renderCard(ev);
-      html += `</div>`;
+    }else{
+      html = `<div class="empty-state"><div class="big">No upcoming fixtures</div><div>${role === 'coach' ? 'Add a match or training session below. Completed matches are in History.' : 'Check back soon for the next fixture.'}</div></div>`;
     }
     content.innerHTML = html;
     attachCardHandlers();
@@ -810,6 +843,7 @@
     }
     const rs = rsvpCache[ev.id] || await loadRsvp(ev.id);
     const crs = coachRsvpCache[ev.id] || await loadCoachRsvp(ev.id);
+    const checkins = ev.type === 'match' ? (checkinCache[ev.id] || await loadCheckin(ev.id)) : {};
 
     let pill = '';
     if(sc && sc.status === 'live') pill = `<span class="live-pill dot">LIVE</span>`;
@@ -881,7 +915,20 @@
       const rsvpData = rs || {};
       const entries = Object.entries(rsvpData);
       const goingCount = entries.filter(([,v]) => v.status === 'going').length;
-
+      const liveForParent = role === 'parent' && ev.type === 'match' && sc && sc.status === 'live';
+      if(role === 'coach' && ev.type === 'match'){
+        const expected = roster.filter(n => rsvpData[n] && rsvpData[n].status === 'going');
+        const checkedNames = expected.filter(n => checkins[n] && checkins[n].checkedIn);
+        const missingNames = expected.filter(n => !checkins[n] || !checkins[n].checkedIn);
+        body += `<div class="checkin-panel"><div class="checkin-title">Match-day Player Check-in</div>
+          <div class="checkin-summary"><span class="checkin-chip">${expected.length} expected</span><span class="checkin-chip in">${checkedNames.length} checked in</span><span class="checkin-chip missing">${missingNames.length} missing</span></div>
+          <div class="checkin-list">${expected.length ? expected.map(name => `<div class="checkin-row"><span>${escapeHtml(name)}</span><button class="checkin-btn ${checkins[name] && checkins[name].checkedIn ? 'checked' : ''}" data-checkin-event="${ev.id}" data-checkin-player="${escapeAttr(name)}">${checkins[name] && checkins[name].checkedIn ? 'Checked In' : 'Check In'}</button></div>`).join('') : '<div style="font-size:12px;color:var(--ink-soft)">No players are marked Available for this match.</div>'}</div>
+          ${missingNames.length ? `<div class="missing-list"><strong>Missing players:</strong> ${missingNames.map(escapeHtml).join(', ')}</div>` : ''}
+        </div>`;
+      }
+      if(liveForParent){
+        body += `<div class="rsvp-closed">The match is LIVE. Player and coach attendance lists are hidden from parents.</div>`;
+      }else{
       body += `<div class="rsvp-block">
         <div class="rsvp-title">Players</div>`;
       if(role === 'coach'){
@@ -976,7 +1023,7 @@
         }
       }
       body += `</div><div class="rsvp-count">${coachGoingCount} confirmed going</div></div>`;
-
+      }
       if(role === 'coach') body += `<div class="fixture-admin"><button class="delete-fixture-btn" data-delete-event="${ev.id}">Delete ${ev.type === 'match' ? 'Fixture' : 'Training'}</button></div>`;
       body += `</div>`;
     }
@@ -986,11 +1033,12 @@
     const coachSummary = { going:0, maybe:0, no:0 };
     Object.values(crs || {}).forEach(v => { if(v && coachSummary[v.status] !== undefined) coachSummary[v.status]++; });
     const selectedCount = team ? Object.keys(team.positions || {}).filter(k => team.positions[k]).length : 0;
+    const checkedInCount = Object.values(checkins || {}).filter(v => v && v.checkedIn).length;
     const summaryHtml = role === 'coach' ? `
       <div class="fixture-summary">
         <div class="summary-row"><span class="summary-label">Players</span><span class="summary-pill g">● ${playerSummary.going}</span><span class="summary-pill m">● ${playerSummary.maybe}</span><span class="summary-pill n">● ${playerSummary.no}</span></div>
         <div class="summary-row"><span class="summary-label">Coaches</span><span class="summary-pill g">● ${coachSummary.going}</span><span class="summary-pill m">● ${coachSummary.maybe}</span><span class="summary-pill n">● ${coachSummary.no}</span></div>
-        ${ev.type === 'match' ? `<div class="team-state"><span class="${selectedCount ? 'ready' : ''}">${selectedCount ? selectedCount + ' selected' : 'Team not selected'}</span><span class="${team && team.published ? 'ready' : ''}">${team && team.published ? 'Published' : 'Draft'}</span></div>` : ''}
+        ${ev.type === 'match' ? `<div class="team-state"><span class="ready">${checkedInCount} checked in</span><span class="${selectedCount ? 'ready' : ''}">${selectedCount ? selectedCount + ' selected' : 'Team not selected'}</span><span class="${team && team.published ? 'ready' : ''}">${team && team.published ? 'Published' : 'Draft'}</span></div>` : ''}
       </div>` : '';
 
     return `
@@ -1026,32 +1074,47 @@
     }
     return html + `</div>`;
   }
+  async function renderHistory(){
+    const el = document.getElementById('history-content');
+    const history = events.filter(isHistoryEvent).slice().sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
+    if(!history.length){
+      el.innerHTML = `<div class="empty-state"><div class="big">No history yet</div><div>Past fixtures and matches marked Final will appear here automatically.</div></div>`;
+      return;
+    }
+    let html = `<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Fixture & Result History</div><div class="list" style="padding:0;">`;
+    for(const ev of history) html += await renderCard(ev);
+    html += `</div>`;
+    el.innerHTML = html;
+    attachCardHandlers();
+  }
   async function renderSelection(){
     const el = document.getElementById('selection-content');
-    const matches = events.filter(e => e.type === 'match');
+    const matches = events.filter(e => e.type === 'match' && !isHistoryEvent(e));
     if(!matches.length){ el.innerHTML = `<div class="empty-state"><div class="big">No match fixtures</div><div>Add a match in Fixtures before selecting a team.</div></div>`; return; }
     let html = `<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Team Selection</div>`;
     for(const ev of matches){
       const team = teamCache[ev.id] || await loadTeam(ev.id);
       const rs = rsvpCache[ev.id] || await loadRsvp(ev.id);
       const coachRs = coachRsvpCache[ev.id] || await loadCoachRsvp(ev.id);
+      const checkins = checkinCache[ev.id] || await loadCheckin(ev.id);
       const attendingCoaches = coachRoster.filter(n => coachRs[n] && coachRs[n].status === 'going');
       team.assistantCoaches = (team.assistantCoaches || []).filter(n => attendingCoaches.includes(n) && n !== team.leadCoach);
       if(team.leadCoach && !attendingCoaches.includes(team.leadCoach)) team.leadCoach = '';
-      const available = roster.filter(n => rs[n] && rs[n].status === 'going');
+      const available = roster.filter(n => rs[n] && rs[n].status === 'going' && checkins[n] && checkins[n].checkedIn);
+      const expectedNotChecked = roster.filter(n => rs[n] && rs[n].status === 'going' && (!checkins[n] || !checkins[n].checkedIn));
       const unsure = roster.filter(n => rs[n] && rs[n].status === 'maybe');
       const unavailable = roster.filter(n => rs[n] && rs[n].status === 'no');
       const isOpen = selectionEventId === ev.id;
       html += `<div class="selection-fixture"><div class="selection-fixture-head" data-open-selection="${ev.id}"><div><div class="selection-fixture-title">${escapeHtml(ev.title)}</div><div class="selection-fixture-meta">${fmtDate(ev.date,ev.time)} · ${available.length} available</div></div><div>${team.published ? 'Published' : 'Draft'} ▸</div></div>`;
       if(isOpen){
         const assigned = new Set([...Object.values(team.positions),...team.subs]);
-        html += `<div class="selection-builder"><div class="availability-summary"><strong>${available.length}</strong> available · <strong>${unsure.length}</strong> unsure · <strong>${unavailable.length}</strong> unavailable. Select a pitch position, then select a player.</div>
+        html += `<div class="selection-builder"><div class="availability-summary"><strong>${available.length}</strong> checked in · <strong>${expectedNotChecked.length}</strong> expected but missing · <strong>${unsure.length}</strong> unsure · <strong>${unavailable.length}</strong> unavailable. Only checked-in players can be selected. Select a pitch position, then select a player.</div>
         <div class="coaches-attending"><div class="coaches-attending-title">Coaches Attending (${attendingCoaches.length})</div>
           <div class="coach-attending-chips">${attendingCoaches.length ? attendingCoaches.map(n => `<span class="coach-attending-chip">${escapeHtml(n)}</span>`).join('') : '<span style="font-size:12px;color:var(--ink-soft)">No coaches have confirmed Available.</span>'}</div>
         </div><div class="virtual-pitch">`;
         PITCH_ROWS.forEach(row => { html += `<div class="pitch-row">`; row.forEach(num => { const pos=POSITIONS.find(p=>p[0]===num); const player=team.positions[num]||''; html += `<button class="position-slot ${selectedPitchSlot===num?'selected':''}" data-slot="${num}" data-ev="${ev.id}"><span class="pos-num">${num}</span><span class="pos-name">${escapeHtml(pos[1])}</span><span class="player-name">${player?escapeHtml(player):'Tap to select'}</span></button>`; }); html += `</div>`; });
-        html += `</div><div class="player-pool-title">Available players</div><div class="player-pool">`;
-        if(!available.length) html += `<span style="font-size:12px;color:var(--ink-soft)">No players have confirmed Available yet.</span>`;
+        html += `</div><div class="player-pool-title">Checked-in players</div><div class="player-pool">`;
+        if(!available.length) html += `<span style="font-size:12px;color:var(--ink-soft)">No available players have been checked in yet.</span>`;
         available.forEach(name => { html += `<button class="pool-player ${assigned.has(name)?'assigned':''}" data-assign-player="${escapeAttr(name)}" data-ev="${ev.id}">${escapeHtml(name)}</button>`; });
         html += `</div><div class="player-pool-title">Substitutes</div><div class="bench-list">`;
         team.subs.forEach((name,i) => { html += `<div class="bench-row"><select data-sub-index="${i}" data-ev="${ev.id}"><option value="">Choose substitute</option>${available.map(n=>`<option value="${escapeAttr(n)}" ${n===name?'selected':''}>${escapeHtml(n)}</option>`).join('')}</select><button class="small-btn" data-remove-sub="${i}" data-ev="${ev.id}">×</button></div>`; });
@@ -1175,6 +1238,24 @@
       });
     });
 
+    document.querySelectorAll('[data-checkin-event]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const evId = btn.getAttribute('data-checkin-event');
+        const player = btn.getAttribute('data-checkin-player');
+        if(!checkinCache[evId]) checkinCache[evId] = {};
+        const isIn = !(checkinCache[evId][player] && checkinCache[evId][player].checkedIn);
+        checkinCache[evId][player] = { checkedIn:isIn, updatedAt:new Date().toISOString() };
+        if(!isIn && teamCache[evId]){
+          Object.keys(teamCache[evId].positions || {}).forEach(k => { if(teamCache[evId].positions[k] === player) delete teamCache[evId].positions[k]; });
+          teamCache[evId].subs = (teamCache[evId].subs || []).filter(n => n !== player);
+          await saveTeam(evId);
+        }
+        await saveCheckin(evId);
+        showToast(isIn ? player + ' checked in' : player + ' check-in removed');
+        await render();
+      });
+    });
     document.querySelectorAll('[data-delete-event]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -1190,9 +1271,10 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
           safeRemove('rsvp-' + evId, true),
           safeRemove('coach-rsvp-' + evId, true),
           safeRemove('score-' + evId, true),
-          safeRemove('team-' + evId, true)
+          safeRemove('team-' + evId, true),
+          safeRemove('checkin-' + evId, true)
         ]);
-        delete rsvpCache[evId]; delete coachRsvpCache[evId]; delete scoreCache[evId]; delete teamCache[evId];
+        delete rsvpCache[evId]; delete coachRsvpCache[evId]; delete scoreCache[evId]; delete teamCache[evId]; delete checkinCache[evId];
         if(openEventId === evId) openEventId = null;
         if(selectionEventId === evId) selectionEventId = null;
         showToast(ev.type === 'match' ? 'Fixture deleted' : 'Training deleted');
@@ -1342,6 +1424,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
       document.querySelectorAll('#type-pick button').forEach(x => x.classList.remove('sel'));
       b.classList.add('sel');
       document.getElementById('f-opponent-wrap').style.display = newType === 'match' ? 'block' : 'none';
+      document.getElementById('f-result-wrap').style.display = newType === 'match' ? 'block' : 'none';
     });
   });
   document.getElementById('f-submit').addEventListener('click', async () => {
@@ -1352,6 +1435,9 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     const mapLinkInput = document.getElementById('f-map-link').value.trim();
     const mapLink = safeMapUrl(mapLinkInput);
     const opponent = document.getElementById('f-opponent').value.trim();
+    const homeScoreText = document.getElementById('f-home-score').value;
+    const awayScoreText = document.getElementById('f-away-score').value;
+    const hasHistoricalResult = newType === 'match' && homeScoreText !== '' && awayScoreText !== '';
     if(!title || !date){ showToast('Add a title and date first'); return; }
     if(mapLinkInput && !mapLink){ showToast('Paste a valid HTTPS Google Maps link'); return; }
     const ev = { id: uid(), type: newType, title, date, time, location, mapLink, opponent };
@@ -1360,8 +1446,8 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     await loadEvents();
     if(newType === 'match'){
       scoreCache[ev.id] = {
-        homeName: 'Boyne RFC U13', awayName: opponent || 'Opposition', home: 0, away: 0, log: [], status: 'scheduled',
-        elapsedSeconds: 0, timerRunning: false, timerStartedAt: null, period: 'Pre-match'
+        homeName: 'Boyne RFC U13', awayName: opponent || 'Opposition', home: hasHistoricalResult ? Math.max(0, Number(homeScoreText)||0) : 0, away: hasHistoricalResult ? Math.max(0, Number(awayScoreText)||0) : 0, log: [], status: hasHistoricalResult ? 'final' : 'scheduled',
+        elapsedSeconds: 0, timerRunning: false, timerStartedAt: null, period: hasHistoricalResult ? 'Full Time' : 'Pre-match'
       };
       await saveScore(ev.id);
     }
@@ -1369,6 +1455,8 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     document.getElementById('f-opponent').value = '';
     document.getElementById('f-location').value = '';
     document.getElementById('f-map-link').value = '';
+    document.getElementById('f-home-score').value = '';
+    document.getElementById('f-away-score').value = '';
     document.getElementById('add-form').classList.remove('open');
     showToast('Added to schedule');
     render();
@@ -1379,6 +1467,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     await loadEvents();
     await loadRoster();
     await loadCoachRoster();
+    for(const ev of events.filter(e => e.type === 'match')) await loadScore(ev.id);
     if(openEventId){
       const ev = events.find(e => e.id === openEventId);
       if(ev){
@@ -1387,6 +1476,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
         if(ev.type === 'match'){
           await loadScore(openEventId);
           await loadTeam(openEventId);
+          await loadCheckin(openEventId);
         }
       }
     }
@@ -1395,6 +1485,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
         await loadRsvp(ev.id);
         await loadCoachRsvp(ev.id);
         await loadTeam(ev.id);
+        await loadCheckin(ev.id);
       }
     }
     await render();
@@ -1406,6 +1497,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     await loadLastChildName();
     await loadLastCoachName();
     await loadEvents();
+    for(const ev of events.filter(e => e.type === 'match')) await loadScore(ev.id);
     loaded = true;
     render();
     setInterval(updateVisibleClocks, 1000);
