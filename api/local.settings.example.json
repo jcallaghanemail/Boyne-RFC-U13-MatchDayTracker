@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "PITCHSIDE_STORAGE_CONNECTION_STRING": "PASTE_YOUR_STORAGE_ACCOUNT_CONNECTION_STRING_HERE",
+    "PITCHSIDE_TABLE_NAME": "PitchsideData",
+    "PITCHSIDE_PARTITION_KEY": "boyne-u13"
+  }
+}
