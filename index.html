@@ -79,6 +79,16 @@
   .app-tabs.show{display:flex;}
   .app-tab{flex:1; border:1px solid var(--line); background:#fff; color:var(--ink-soft); border-radius:8px; padding:9px 5px; font-family:'Oswald'; font-weight:600; font-size:12px; cursor:pointer;}
   .app-tab.active{background:var(--pitch-deep); color:#fff; border-color:var(--pitch-deep);}
+  .app-tab.coach-only{display:none;}
+  .app-tabs.coach-view .app-tab.coach-only{display:block;}
+  .match-report{margin:0 0 14px;padding:12px;background:#FFF8ED;border:1px solid #E9CFAB;border-radius:10px;}
+  .match-report-title{font-family:'Oswald';font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--mud-dark);margin-bottom:7px;}
+  .match-report-copy{white-space:pre-wrap;font-size:12.5px;line-height:1.5;color:var(--ink);}
+  .match-report-motm{margin-top:8px;font-size:12px;font-weight:700;color:var(--pitch-deep);}
+  .match-report-editor{margin:0 0 14px;padding:12px;background:#F0EDE3;border:1px solid var(--line);border-radius:10px;}
+  .match-report-editor label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);margin:8px 0 4px;}
+  .match-report-editor textarea,.match-report-editor select{width:100%;padding:9px;border:1px solid var(--line);border-radius:7px;background:#fff;font-family:inherit;}
+  .match-report-editor textarea{min-height:84px;resize:vertical;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
   .selection-page,.history-page{padding:16px;}
@@ -360,8 +370,8 @@
   </div>
   <div class="app-tabs" id="app-tabs">
     <button class="app-tab active" data-tab="fixtures">Fixtures</button>
-    <button class="app-tab" data-tab="squad">Squad</button>
-    <button class="app-tab" data-tab="selection">Selection</button>
+    <button class="app-tab coach-only" data-tab="squad">Squad</button>
+    <button class="app-tab coach-only" data-tab="selection">Selection</button>
     <button class="app-tab" data-tab="history">History</button>
   </div>
 
@@ -638,6 +648,8 @@
     if(typeof sc.timerRunning !== 'boolean') sc.timerRunning = false;
     if(!sc.timerStartedAt) sc.timerStartedAt = null;
     if(!sc.period) sc.period = 'Pre-match';
+    if(typeof sc.matchReport !== 'string') sc.matchReport = '';
+    if(typeof sc.playerOfMatch !== 'string') sc.playerOfMatch = '';
     scoreCache[eventId] = sc;
     return sc;
   }
@@ -794,18 +806,20 @@
     renderChildStrip();
     document.getElementById('role-parent').classList.toggle('active', role === 'parent');
     document.getElementById('role-coach').classList.toggle('active', role === 'coach');
-    if(role !== 'coach') activeTab = 'fixtures';
-    document.getElementById('app-tabs').classList.toggle('show', role === 'coach');
+    if(role !== 'coach' && !['fixtures','history'].includes(activeTab)) activeTab = 'fixtures';
+    const tabs = document.getElementById('app-tabs');
+    tabs.classList.add('show');
+    tabs.classList.toggle('coach-view', role === 'coach');
     document.querySelectorAll('.app-tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === activeTab));
     document.getElementById('content').style.display = activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('selection-content').style.display = role === 'coach' && activeTab === 'selection' ? 'block' : 'none';
-    document.getElementById('history-content').style.display = role === 'coach' && activeTab === 'history' ? 'block' : 'none';
+    document.getElementById('history-content').style.display = activeTab === 'history' ? 'block' : 'none';
     document.getElementById('add-event-card').style.display = role === 'coach' && activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     document.getElementById('coach-roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     if(role === 'coach'){ renderRosterChips(); renderCoachRosterChips(); }
     if(role === 'coach' && activeTab === 'selection') await renderSelection();
-    if(role === 'coach' && activeTab === 'history') await renderHistory();
+    if(activeTab === 'history') await renderHistory();
 
     const content = document.getElementById('content');
     if(!loaded){
@@ -881,9 +895,18 @@
             ${sc.log.length === 0 ? '<div class="scorelog-empty">No scoring yet</div>' :
               sc.log.slice().reverse().map(l => `<div class="scorelog-item"><span>${LABELS[l.type]} — ${l.scorer ? escapeHtml(l.scorer) : (l.team === 'home' ? escapeHtml(sc.homeName) : escapeHtml(sc.awayName))}${typeof l.matchSeconds === 'number' ? ` · ${Math.floor(l.matchSeconds/60)}'` : ''}</span><span>+${POINTS[l.type]}</span></div>`).join('')}
           </div>
-          ${scorerSummaryHtml(sc)}`;
+          ${scorerSummaryHtml(sc)}
+          ${(sc.matchReport || sc.playerOfMatch) ? `<div class="match-report"><div class="match-report-title">Match Report</div>${sc.matchReport ? `<div class="match-report-copy">${escapeHtml(sc.matchReport)}</div>` : ''}${sc.playerOfMatch ? `<div class="match-report-motm">Player of the Match: ${escapeHtml(sc.playerOfMatch)}</div>` : ''}</div>` : ''}`;
         if(role === 'coach'){
           body += `
+            <div class="match-report-editor">
+              <div class="match-report-title">Match Report</div>
+              <label>Summary</label>
+              <textarea class="match-report-input" data-ev="${ev.id}" placeholder="Add a short match summary for parents and coaches">${escapeHtml(sc.matchReport || '')}</textarea>
+              <label>Player of the Match</label>
+              <select class="match-report-motm-select" data-ev="${ev.id}"><option value="">Not selected</option>${roster.map(n => `<option value="${escapeAttr(n)}" ${sc.playerOfMatch===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}</select>
+              <button class="primary-btn" data-save-report="${ev.id}" style="width:100%;margin-top:10px;">Save Match Report</button>
+            </div>
             <div class="coach-score-controls">
               <div class="scorer-pick"><label>Boyne scorer / kicker</label><select class="scorer-select" data-ev="${ev.id}"><option value="">Choose player (optional)</option>${Array.from(new Set([...(team ? Object.values(team.positions || {}) : []), ...(team ? team.subs || [] : []), ...roster])).filter(Boolean).map(n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('')}</select></div>
               <div class="csc-row"><div class="csc-label">${escapeHtml(sc.homeName)}</div><div class="csc-btns">
@@ -916,6 +939,7 @@
       const entries = Object.entries(rsvpData);
       const goingCount = entries.filter(([,v]) => v.status === 'going').length;
       const liveForParent = role === 'parent' && ev.type === 'match' && sc && sc.status === 'live';
+      const privateAttendanceForParent = role === 'parent' && ev.type === 'match' && (liveForParent || isHistoryEvent(ev));
       if(role === 'coach' && ev.type === 'match'){
         const expected = roster.filter(n => rsvpData[n] && rsvpData[n].status === 'going');
         const checkedNames = expected.filter(n => checkins[n] && checkins[n].checkedIn);
@@ -926,8 +950,8 @@
           ${missingNames.length ? `<div class="missing-list"><strong>Missing players:</strong> ${missingNames.map(escapeHtml).join(', ')}</div>` : ''}
         </div>`;
       }
-      if(liveForParent){
-        body += `<div class="rsvp-closed">The match is LIVE. Player and coach attendance lists are hidden from parents.</div>`;
+      if(privateAttendanceForParent){
+        body += `<div class="rsvp-closed">${liveForParent ? 'The match is LIVE.' : 'This match is in History.'} Player and coach attendance lists are private to coaches.</div>`;
       }else{
       body += `<div class="rsvp-block">
         <div class="rsvp-title">Players</div>`;
@@ -1238,6 +1262,21 @@
       });
     });
 
+    document.querySelectorAll('[data-save-report]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const evId = btn.getAttribute('data-save-report');
+        const sc = scoreCache[evId];
+        if(!sc) return;
+        const report = document.querySelector('.match-report-input[data-ev="' + evId + '"]');
+        const motm = document.querySelector('.match-report-motm-select[data-ev="' + evId + '"]');
+        sc.matchReport = report ? report.value.trim() : '';
+        sc.playerOfMatch = motm ? motm.value : '';
+        await saveScore(evId);
+        showToast('Match report saved');
+        await render();
+      });
+    });
     document.querySelectorAll('[data-checkin-event]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -1340,7 +1379,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
   }
 
   // Role toggle and coach navigation
-  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; activeTab='fixtures'; render(); });
+  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history'].includes(activeTab)) activeTab='fixtures'; render(); });
   document.getElementById('role-coach').addEventListener('click', () => { role = 'coach'; render(); });
   document.querySelectorAll('.app-tab').forEach(btn => btn.addEventListener('click', () => { activeTab=btn.getAttribute('data-tab'); openEventId=null; render(); }));
 
@@ -1447,7 +1486,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     if(newType === 'match'){
       scoreCache[ev.id] = {
         homeName: 'Boyne RFC U13', awayName: opponent || 'Opposition', home: hasHistoricalResult ? Math.max(0, Number(homeScoreText)||0) : 0, away: hasHistoricalResult ? Math.max(0, Number(awayScoreText)||0) : 0, log: [], status: hasHistoricalResult ? 'final' : 'scheduled',
-        elapsedSeconds: 0, timerRunning: false, timerStartedAt: null, period: hasHistoricalResult ? 'Full Time' : 'Pre-match'
+        elapsedSeconds: 0, timerRunning: false, timerStartedAt: null, period: hasHistoricalResult ? 'Full Time' : 'Pre-match', matchReport:'', playerOfMatch:''
       };
       await saveScore(ev.id);
     }
