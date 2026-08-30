@@ -186,6 +186,11 @@
   .team-state{display:inline-flex;gap:5px;flex-wrap:wrap;margin-top:2px;}
   .team-state span{padding:3px 6px;border-radius:9px;background:#F0EDE3;color:var(--ink-soft);font-size:10px;font-weight:700;}
   .team-state .ready{background:#E4F2E8;color:#1F6B42;}
+  .history-card-summary{margin-top:9px;padding:9px 10px;background:#F6F3EA;border:1px solid var(--line);border-radius:8px;display:grid;gap:5px;}
+  .history-card-line{font-size:11px;line-height:1.4;color:var(--ink-soft);}
+  .history-card-line strong{color:var(--ink);}
+  .history-card-score{font-family:'JetBrains Mono';font-size:12px;font-weight:700;color:var(--pitch-deep);}
+  .history-card-names{font-size:10.5px;line-height:1.4;color:var(--ink-soft);overflow-wrap:anywhere;}
   .event-right{display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0;}
   .live-pill{
     font-family:'JetBrains Mono'; font-size:10px; font-weight:700; letter-spacing:1px;
@@ -1080,12 +1085,41 @@
     Object.values(crs || {}).forEach(v => { if(v && coachSummary[v.status] !== undefined) coachSummary[v.status]++; });
     const selectedCount = team ? Object.keys(team.positions || {}).filter(k => team.positions[k]).length : 0;
     const checkedInCount = Object.values(checkins || {}).filter(v => v && v.checkedIn).length;
-    const summaryHtml = role === 'coach' ? `
+    let historySummaryHtml = '';
+    if(isHistoryEvent(ev)){
+      const attendedNames = roster.filter(n => checkins[n] && checkins[n].checkedIn);
+      if(ev.type === 'match'){
+        const scorerTotals = {};
+        (sc && sc.log ? sc.log : []).filter(l => l.team === 'home' && l.scorer).forEach(l => {
+          if(!scorerTotals[l.scorer]) scorerTotals[l.scorer] = {};
+          scorerTotals[l.scorer][l.type] = (scorerTotals[l.scorer][l.type] || 0) + 1;
+        });
+        const scorerLines = Object.keys(scorerTotals).map(name => {
+          const scores = Object.entries(scorerTotals[name]).map(([type,count]) => `${count} ${count === 1 ? LABELS[type] : LABELS[type] + 's'}`).join(', ');
+          return `${escapeHtml(name)} (${escapeHtml(scores)})`;
+        });
+        historySummaryHtml = `<div class="history-card-summary">
+          ${sc ? `<div class="history-card-score">${escapeHtml(sc.homeName)} ${sc.home} - ${sc.away} ${escapeHtml(sc.awayName)}</div>` : ''}
+          <div class="history-card-line"><strong>Attendance:</strong> ${attendedNames.length} player${attendedNames.length === 1 ? '' : 's'} attended</div>
+          <div class="history-card-line"><strong>Scorers:</strong> ${scorerLines.length ? scorerLines.join('; ') : 'No named scorers recorded'}</div>
+        </div>`;
+      }else{
+        const expectedNames = Object.entries(rs || {}).filter(([,v]) => v.status === 'going').map(([n]) => n);
+        const absentNames = expectedNames.filter(n => !checkins[n] || !checkins[n].checkedIn);
+        const preview = attendedNames.slice(0,3);
+        const more = Math.max(0, attendedNames.length - preview.length);
+        historySummaryHtml = `<div class="history-card-summary">
+          <div class="history-card-line"><strong>Attendance:</strong> ${attendedNames.length} attended · ${absentNames.length} absent</div>
+          ${role === 'coach' ? `<div class="history-card-names"><strong>Attended:</strong> ${preview.length ? preview.map(escapeHtml).join(', ') + (more ? ` +${more} more` : '') : 'No players checked in'}</div>` : ''}
+        </div>`;
+      }
+    }
+    const summaryHtml = isHistoryEvent(ev) ? historySummaryHtml : (role === 'coach' ? `
       <div class="fixture-summary">
         <div class="summary-row"><span class="summary-label">Players</span><span class="summary-pill g">● ${playerSummary.going}</span><span class="summary-pill m">● ${playerSummary.maybe}</span><span class="summary-pill n">● ${playerSummary.no}</span></div>
         <div class="summary-row"><span class="summary-label">Coaches</span><span class="summary-pill g">● ${coachSummary.going}</span><span class="summary-pill m">● ${coachSummary.maybe}</span><span class="summary-pill n">● ${coachSummary.no}</span></div>
         ${ev.type === 'match' ? `<div class="team-state"><span class="ready">${checkedInCount} checked in</span><span class="${selectedCount ? 'ready' : ''}">${selectedCount ? selectedCount + ' selected' : 'Team not selected'}</span><span class="${team && team.published ? 'ready' : ''}">${team && team.published ? 'Published' : 'Draft'}</span></div>` : `<div class="team-state"><span class="ready">${checkedInCount} checked in</span></div>`}
-      </div>` : '';
+      </div>` : '');
 
     return `
       <div class="event-card ${isOpen ? 'open' : ''}" data-id="${ev.id}">
