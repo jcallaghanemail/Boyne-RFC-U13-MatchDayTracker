@@ -81,14 +81,6 @@
   .app-tab.active{background:var(--pitch-deep); color:#fff; border-color:var(--pitch-deep);}
   .app-tab.coach-only{display:none;}
   .app-tabs.coach-view .app-tab.coach-only{display:block;}
-  .match-report{margin:0 0 14px;padding:12px;background:#FFF8ED;border:1px solid #E9CFAB;border-radius:10px;}
-  .match-report-title{font-family:'Oswald';font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--mud-dark);margin-bottom:7px;}
-  .match-report-copy{white-space:pre-wrap;font-size:12.5px;line-height:1.5;color:var(--ink);}
-  .match-report-motm{margin-top:8px;font-size:12px;font-weight:700;color:var(--pitch-deep);}
-  .match-report-editor{margin:0 0 14px;padding:12px;background:#F0EDE3;border:1px solid var(--line);border-radius:10px;}
-  .match-report-editor label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);margin:8px 0 4px;}
-  .match-report-editor textarea,.match-report-editor select{width:100%;padding:9px;border:1px solid var(--line);border-radius:7px;background:#fff;font-family:inherit;}
-  .match-report-editor textarea{min-height:84px;resize:vertical;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
   .selection-page,.history-page{padding:16px;}
@@ -648,8 +640,6 @@
     if(typeof sc.timerRunning !== 'boolean') sc.timerRunning = false;
     if(!sc.timerStartedAt) sc.timerStartedAt = null;
     if(!sc.period) sc.period = 'Pre-match';
-    if(typeof sc.matchReport !== 'string') sc.matchReport = '';
-    if(typeof sc.playerOfMatch !== 'string') sc.playerOfMatch = '';
     scoreCache[eventId] = sc;
     return sc;
   }
@@ -896,17 +886,9 @@
               sc.log.slice().reverse().map(l => `<div class="scorelog-item"><span>${LABELS[l.type]} — ${l.scorer ? escapeHtml(l.scorer) : (l.team === 'home' ? escapeHtml(sc.homeName) : escapeHtml(sc.awayName))}${typeof l.matchSeconds === 'number' ? ` · ${Math.floor(l.matchSeconds/60)}'` : ''}</span><span>+${POINTS[l.type]}</span></div>`).join('')}
           </div>
           ${scorerSummaryHtml(sc)}
-          ${(sc.matchReport || sc.playerOfMatch) ? `<div class="match-report"><div class="match-report-title">Match Report</div>${sc.matchReport ? `<div class="match-report-copy">${escapeHtml(sc.matchReport)}</div>` : ''}${sc.playerOfMatch ? `<div class="match-report-motm">Player of the Match: ${escapeHtml(sc.playerOfMatch)}</div>` : ''}</div>` : ''}`;
+          `;
         if(role === 'coach'){
           body += `
-            <div class="match-report-editor">
-              <div class="match-report-title">Match Report</div>
-              <label>Summary</label>
-              <textarea class="match-report-input" data-ev="${ev.id}" placeholder="Add a short match summary for parents and coaches">${escapeHtml(sc.matchReport || '')}</textarea>
-              <label>Player of the Match</label>
-              <select class="match-report-motm-select" data-ev="${ev.id}"><option value="">Not selected</option>${roster.map(n => `<option value="${escapeAttr(n)}" ${sc.playerOfMatch===n?'selected':''}>${escapeHtml(n)}</option>`).join('')}</select>
-              <button class="primary-btn" data-save-report="${ev.id}" style="width:100%;margin-top:10px;">Save Match Report</button>
-            </div>
             <div class="coach-score-controls">
               <div class="scorer-pick"><label>Boyne scorer / kicker</label><select class="scorer-select" data-ev="${ev.id}"><option value="">Choose player (optional)</option>${Array.from(new Set([...(team ? Object.values(team.positions || {}) : []), ...(team ? team.subs || [] : []), ...roster])).filter(Boolean).map(n => `<option value="${escapeAttr(n)}">${escapeHtml(n)}</option>`).join('')}</select></div>
               <div class="csc-row"><div class="csc-label">${escapeHtml(sc.homeName)}</div><div class="csc-btns">
@@ -1262,21 +1244,6 @@
       });
     });
 
-    document.querySelectorAll('[data-save-report]').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const evId = btn.getAttribute('data-save-report');
-        const sc = scoreCache[evId];
-        if(!sc) return;
-        const report = document.querySelector('.match-report-input[data-ev="' + evId + '"]');
-        const motm = document.querySelector('.match-report-motm-select[data-ev="' + evId + '"]');
-        sc.matchReport = report ? report.value.trim() : '';
-        sc.playerOfMatch = motm ? motm.value : '';
-        await saveScore(evId);
-        showToast('Match report saved');
-        await render();
-      });
-    });
     document.querySelectorAll('[data-checkin-event]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -1486,7 +1453,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     if(newType === 'match'){
       scoreCache[ev.id] = {
         homeName: 'Boyne RFC U13', awayName: opponent || 'Opposition', home: hasHistoricalResult ? Math.max(0, Number(homeScoreText)||0) : 0, away: hasHistoricalResult ? Math.max(0, Number(awayScoreText)||0) : 0, log: [], status: hasHistoricalResult ? 'final' : 'scheduled',
-        elapsedSeconds: 0, timerRunning: false, timerStartedAt: null, period: hasHistoricalResult ? 'Full Time' : 'Pre-match', matchReport:'', playerOfMatch:''
+        elapsedSeconds: 0, timerRunning: false, timerStartedAt: null, period: hasHistoricalResult ? 'Full Time' : 'Pre-match'
       };
       await saveScore(ev.id);
     }
