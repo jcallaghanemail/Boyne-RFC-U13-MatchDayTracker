@@ -358,6 +358,13 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
   .loading-row{padding:24px; text-align:center; color:var(--ink-soft); font-size:13px;}
+
+  /* Push notifications */
+  .notification-row{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .notification-btn{border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:8px 11px;font-family:'Oswald';font-size:12px;font-weight:600;cursor:pointer;}
+  .notification-btn.enabled{background:var(--going);border-color:#A9D4B7;}
+  .notification-btn:disabled{opacity:.65;cursor:wait;}
+  .notification-status{font-size:10.5px;color:var(--chalk);opacity:.85;}
 </style>
 </head>
 <body>
@@ -378,6 +385,10 @@
       </div>
     </div>
     <div class="child-strip" id="child-strip"></div>
+    <div class="notification-row">
+      <button id="enable-push-btn" class="notification-btn" type="button">🔔 Enable Notifications</button>
+      <span id="notification-status" class="notification-status">Notifications are off</span>
+    </div>
   </div>
   <div class="app-tabs" id="app-tabs">
     <button class="app-tab active" data-tab="fixtures">Fixtures</button>
@@ -463,6 +474,98 @@
 
 <div class="toast" id="toast"></div>
 
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getMessaging, getToken, isSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+
+  // Replace these values with the Firebase web app configuration from
+  // Firebase Console > Project settings > General > Your apps.
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+
+  // Replace this with Firebase Console > Project settings > Cloud Messaging
+  // > Web Push certificates > Key pair.
+  const vapidKey = "YOUR_VAPID_KEY";
+
+  const button = document.getElementById('enable-push-btn');
+  const status = document.getElementById('notification-status');
+  const configured = !Object.values(firebaseConfig).some(v => v.startsWith('YOUR_')) && vapidKey !== 'YOUR_VAPID_KEY';
+
+  function setPushState(message, enabled = false){
+    status.textContent = message;
+    button.classList.toggle('enabled', enabled);
+    button.textContent = enabled ? '✓ Notifications Enabled' : '🔔 Enable Notifications';
+    button.disabled = enabled;
+  }
+
+  async function initialisePush(){
+    if(!('Notification' in window) || !('serviceWorker' in navigator) || !(await isSupported())){
+      setPushState('Push notifications are not supported on this browser');
+      button.disabled = true;
+      return;
+    }
+    if(!configured){
+      setPushState('Firebase settings required');
+      console.warn('Add your Firebase web config and VAPID key to index.html and firebase-messaging-sw.js');
+      return;
+    }
+
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+
+    if(Notification.permission === 'granted' && localStorage.getItem('boyneFCMToken')){
+      setPushState('Notifications are enabled', true);
+    }else if(Notification.permission === 'denied'){
+      setPushState('Notifications blocked in browser settings');
+      button.disabled = true;
+    }
+
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      status.textContent = 'Enabling notifications…';
+      try{
+        const permission = await Notification.requestPermission();
+        if(permission !== 'granted'){
+          setPushState(permission === 'denied' ? 'Notifications blocked in browser settings' : 'Permission was not granted');
+          button.disabled = permission === 'denied';
+          return;
+        }
+        const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
+        if(!token) throw new Error('Firebase did not return a device token');
+        localStorage.setItem('boyneFCMToken', token);
+        localStorage.setItem('boyneFCMRole', new URLSearchParams(location.search).get('portal') || 'coach');
+        console.log('Boyne FCM token:', token);
+        setPushState('Notifications are enabled', true);
+      }catch(error){
+        console.error('Unable to enable notifications:', error);
+        setPushState('Could not enable notifications. Check Firebase settings.');
+        button.disabled = false;
+      }
+    });
+
+    onMessage(messaging, payload => {
+      const title = payload.notification?.title || 'Boyne RFC U13';
+      const body = payload.notification?.body || 'New team update';
+      window.dispatchEvent(new CustomEvent('boyne-notification', { detail: { title, body, data: payload.data || {} } }));
+      if(Notification.permission === 'granted' && document.visibilityState === 'visible'){
+        registration.showNotification(title, { body, data: payload.data || {}, tag: payload.data?.tag || undefined });
+      }
+    });
+  }
+
+  initialisePush().catch(error => {
+    console.error('Push setup failed:', error);
+    setPushState('Could not initialise notifications');
+  });
+</script>
 <script>
 (function(){
   // Shared storage through the Azure Functions API.
@@ -1569,6 +1672,12 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     render();
   });
 
+
+  window.addEventListener('boyne-notification', (event) => {
+    const detail = event.detail || {};
+    showToast((detail.title || 'Boyne RFC U13') + ': ' + (detail.body || 'New team update'));
+    refreshLive();
+  });
   // Poll for live updates from other users
   async function refreshLive(){
     await loadEvents();
