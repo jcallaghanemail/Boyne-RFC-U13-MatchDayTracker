@@ -1,5 +1,5 @@
 const { app } = require('@azure/functions');
-const { saveToken } = require('../tokens');
+const { saveToken } = require('../../tokens');
 app.http('register-device', {
   methods: ['POST'], authLevel: 'anonymous', route: 'register-device',
   handler: async request => {
