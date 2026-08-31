@@ -469,7 +469,7 @@
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {getMessaging,getToken,isSupported,onMessage} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 const firebaseConfig={apiKey:"AIzaSyBlT2UKLGBum9xTFmNusQHv9IRastAQqaA",authDomain:"boyne-rugby-tracker.firebaseapp.com",projectId:"boyne-rugby-tracker",storageBucket:"boyne-rugby-tracker.firebasestorage.app",messagingSenderId:"64724348826",appId:"1:64724348826:web:c71a4eee5b0121e412d423"};
-const vapidKey="AIzaSyBlT2UKLGBum9xTFmNusQHv9IRastAQqaA";
+const vapidKey="BLbZancYiPj__47LlZoDppMxnpa-R3LcUKmGKTZH2ESCNbvC44oszPhUDwHCCW2lC_8k5WizW16VLe6Sw3jXSZI";
 const button=document.getElementById('enable-push-btn'),status=document.getElementById('notification-status');
 function state(text,on=false){status.textContent=text;button.classList.toggle('enabled',on);button.textContent=on?'✓ Notifications Enabled':'🔔 Enable Notifications';button.disabled=on;}
 async function setup(){
