@@ -1,6 +1,6 @@
 const { app } = require('@azure/functions');
-const { firebaseMessaging } = require('../firebase');
-const { getTokens, removeToken } = require('../tokens');
+const { firebaseMessaging } = require('../../firebase');
+const { getTokens, removeToken } = require('../../tokens');
 app.http('send-notification', {
   methods:['POST'], authLevel:'anonymous', route:'send-notification',
   handler: async request => {
