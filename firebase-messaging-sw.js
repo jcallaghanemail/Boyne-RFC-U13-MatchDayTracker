@@ -3,12 +3,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 // Use the same Firebase web app configuration as index.html.
 firebase.initializeApp({
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_AUTH_DOMAIN',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_STORAGE_BUCKET',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId: 'YOUR_APP_ID'
+  apiKey: 'AIzaSyBlT2UKLGBum9xTFmNusQHv9IRastAQqaA',
+  authDomain: 'boyne-rugby-tracker.firebaseapp.com',
+  projectId: 'boyne-rugby-tracker',
+  storageBucket: 'boyne-rugby-tracker.firebasestorage.app',
+  messagingSenderId: '64724348826',
+  appId: '1:64724348826:web:c71a4eee5b0121e412d423'
 });
 
 const messaging = firebase.messaging();
