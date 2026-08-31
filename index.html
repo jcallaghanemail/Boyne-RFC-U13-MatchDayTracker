@@ -358,13 +358,7 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
   .loading-row{padding:24px; text-align:center; color:var(--ink-soft); font-size:13px;}
-
-  /* Push notifications */
-  .notification-row{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-  .notification-btn{border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:8px 11px;font-family:'Oswald';font-size:12px;font-weight:600;cursor:pointer;}
-  .notification-btn.enabled{background:var(--going);border-color:#A9D4B7;}
-  .notification-btn:disabled{opacity:.65;cursor:wait;}
-  .notification-status{font-size:10.5px;color:var(--chalk);opacity:.85;}
+  .notification-row{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.notification-btn{border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:8px 11px;font-family:'Oswald';font-size:12px;font-weight:600;cursor:pointer}.notification-btn.enabled{background:var(--going)}.notification-status{font-size:10.5px;color:#fff;opacity:.85}
 </style>
 </head>
 <body>
@@ -385,10 +379,7 @@
       </div>
     </div>
     <div class="child-strip" id="child-strip"></div>
-    <div class="notification-row">
-      <button id="enable-push-btn" class="notification-btn" type="button">🔔 Enable Notifications</button>
-      <span id="notification-status" class="notification-status">Notifications are off</span>
-    </div>
+    <div class="notification-row"><button id="enable-push-btn" class="notification-btn" type="button">🔔 Enable Notifications</button><span id="notification-status" class="notification-status">Notifications are off</span></div>
   </div>
   <div class="app-tabs" id="app-tabs">
     <button class="app-tab active" data-tab="fixtures">Fixtures</button>
@@ -474,97 +465,23 @@
 
 <div class="toast" id="toast"></div>
 
-
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getMessaging, getToken, isSupported, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
-
-  // Replace these values with the Firebase web app configuration from
-  // Firebase Console > Project settings > General > Your apps.
-  const firebaseConfig = {
-    apiKey: "AIzaSyBlT2UKLGBum9xTFmNusQHv9IRastAQqaA",
-    authDomain: "boyne-rugby-tracker.firebaseapp.com",
-    projectId: "boyne-rugby-tracker",
-    storageBucket: "boyne-rugby-tracker.firebasestorage.app",
-    messagingSenderId: "64724348826",
-    appId: "1:64724348826:web:c71a4eee5b0121e412d423"
-  };
-
-  // Replace this with Firebase Console > Project settings > Cloud Messaging
-  // > Web Push certificates > Key pair.
-  const vapidKey = "BLbZancYiPj__47LlZoDppMxnpa-R3LcUKmGKTZH2ESCNbvC44oszPhUDwHCCW2lC_8k5WizW16VLe6Sw3jXSZI";
-
-  const button = document.getElementById('enable-push-btn');
-  const status = document.getElementById('notification-status');
-  const configured = !Object.values(firebaseConfig).some(v => v.startsWith('YOUR_')) && vapidKey !== 'YOUR_VAPID_KEY';
-
-  function setPushState(message, enabled = false){
-    status.textContent = message;
-    button.classList.toggle('enabled', enabled);
-    button.textContent = enabled ? '✓ Notifications Enabled' : '🔔 Enable Notifications';
-    button.disabled = enabled;
-  }
-
-  async function initialisePush(){
-    if(!('Notification' in window) || !('serviceWorker' in navigator) || !(await isSupported())){
-      setPushState('Push notifications are not supported on this browser');
-      button.disabled = true;
-      return;
-    }
-    if(!configured){
-      setPushState('Firebase settings required');
-      console.warn('Add your Firebase web config and VAPID key to index.html and firebase-messaging-sw.js');
-      return;
-    }
-
-    const app = initializeApp(firebaseConfig);
-    const messaging = getMessaging(app);
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-
-    if(Notification.permission === 'granted' && localStorage.getItem('boyneFCMToken')){
-      setPushState('Notifications are enabled', true);
-    }else if(Notification.permission === 'denied'){
-      setPushState('Notifications blocked in browser settings');
-      button.disabled = true;
-    }
-
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      status.textContent = 'Enabling notifications…';
-      try{
-        const permission = await Notification.requestPermission();
-        if(permission !== 'granted'){
-          setPushState(permission === 'denied' ? 'Notifications blocked in browser settings' : 'Permission was not granted');
-          button.disabled = permission === 'denied';
-          return;
-        }
-        const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
-        if(!token) throw new Error('Firebase did not return a device token');
-        localStorage.setItem('boyneFCMToken', token);
-        localStorage.setItem('boyneFCMRole', new URLSearchParams(location.search).get('portal') || 'coach');
-        console.log('Boyne FCM token:', token);
-        setPushState('Notifications are enabled', true);
-      }catch(error){
-        console.error('Unable to enable notifications:', error);
-        setPushState('Could not enable notifications. Check Firebase settings.');
-        button.disabled = false;
-      }
-    });
-
-    onMessage(messaging, payload => {
-      const title = payload.notification?.title || 'Boyne RFC U13';
-      const body = payload.notification?.body || 'New team update';
-      window.dispatchEvent(new CustomEvent('boyne-notification', { detail: { title, body, data: payload.data || {} } }));
-      if(Notification.permission === 'granted' && document.visibilityState === 'visible'){
-        registration.showNotification(title, { body, data: payload.data || {}, tag: payload.data?.tag || undefined });
-      }
-    });
-  }
-
-  initialisePush().catch(error => {
-    console.error('Push setup failed:', error);
-    setPushState('Could not initialise notifications');
-  });
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {getMessaging,getToken,isSupported,onMessage} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+const firebaseConfig={apiKey:"YOUR_API_KEY",authDomain:"YOUR_AUTH_DOMAIN",projectId:"YOUR_PROJECT_ID",storageBucket:"YOUR_STORAGE_BUCKET",messagingSenderId:"YOUR_MESSAGING_SENDER_ID",appId:"YOUR_APP_ID"};
+const vapidKey="YOUR_VAPID_KEY";
+const button=document.getElementById('enable-push-btn'),status=document.getElementById('notification-status');
+function state(text,on=false){status.textContent=text;button.classList.toggle('enabled',on);button.textContent=on?'✓ Notifications Enabled':'🔔 Enable Notifications';button.disabled=on;}
+async function setup(){
+ if(!('Notification' in window)||!('serviceWorker' in navigator)||!(await isSupported())){state('Push is not supported');button.disabled=true;return;}
+ if(Object.values(firebaseConfig).some(v=>v.startsWith('YOUR_'))||vapidKey==='YOUR_VAPID_KEY'){state('Firebase settings required');return;}
+ const messaging=getMessaging(initializeApp(firebaseConfig));
+ const sw=await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+ button.onclick=async()=>{try{button.disabled=true;status.textContent='Enabling notifications…';if(await Notification.requestPermission()!=='granted')throw new Error('Permission not granted');const token=await getToken(messaging,{vapidKey,serviceWorkerRegistration:sw});if(!token)throw new Error('No token returned');const portalRole=new URLSearchParams(location.search).get('portal')||'coach';localStorage.setItem('boyneFCMToken',token);localStorage.setItem('boyneFCMRole',portalRole);const r=await fetch('/api/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,role:portalRole})});if(!r.ok)throw new Error(await r.text());console.log('Boyne FCM token:',token);state('Notifications are enabled',true);}catch(e){console.error(e);state('Could not enable notifications');button.disabled=false;}};
+ onMessage(messaging,p=>window.dispatchEvent(new CustomEvent('boyne-notification',{detail:{title:p.notification?.title||'Boyne RFC U13',body:p.notification?.body||'New team update'}})));
+ if(Notification.permission==='granted'&&localStorage.getItem('boyneFCMToken'))state('Notifications are enabled',true);
+}
+setup().catch(e=>{console.error(e);state('Could not initialise notifications')});
 </script>
 <script>
 (function(){
@@ -628,6 +545,7 @@
     showToast._h = setTimeout(()=> t.classList.remove('show'), 2200);
   }
 
+  async function sendPushNotification(kind,title,body,data){try{const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,title,body,data:data||{},audience:'all'})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
   async function safeGet(key, shared){
     try{
       if(!shared) return localStorage.getItem(key);
@@ -1327,7 +1245,7 @@
     document.querySelectorAll('[data-sub-index]').forEach(sel=>sel.onchange=async()=>{ const id=sel.getAttribute('data-ev'), i=Number(sel.getAttribute('data-sub-index')), name=sel.value, team=teamCache[id]; Object.keys(team.positions).forEach(k=>{if(team.positions[k]===name) delete team.positions[k];}); team.subs=team.subs.filter((n,j)=>n!==name||j===i); team.subs[i]=name; await saveTeam(id); await renderSelection(); });
     document.querySelectorAll('[data-remove-sub]').forEach(b=>b.onclick=async()=>{ const id=b.getAttribute('data-ev'),i=Number(b.getAttribute('data-remove-sub')); teamCache[id].subs.splice(i,1); await saveTeam(id); await renderSelection(); });
     document.querySelectorAll('[data-clear-team]').forEach(b=>b.onclick=async()=>{ const id=b.getAttribute('data-clear-team'); teamCache[id]={positions:{},subs:[],leadCoach:'',assistantCoaches:[],published:false,publishedAt:null}; await saveTeam(id); await renderSelection(); });
-    document.querySelectorAll('[data-publish-team]').forEach(b=>b.onclick=async()=>{ const id=b.getAttribute('data-publish-team'),team=teamCache[id]; if(!team.published && Object.keys(team.positions).length===0){showToast('Select at least one player first');return;} team.published=!team.published; team.publishedAt=team.published?new Date().toISOString():null; await saveTeam(id); showToast(team.published?'Team published':'Team unpublished'); await renderSelection(); });
+    document.querySelectorAll('[data-publish-team]').forEach(b=>b.onclick=async()=>{ const id=b.getAttribute('data-publish-team'),team=teamCache[id]; if(!team.published && Object.keys(team.positions).length===0){showToast('Select at least one player first');return;} team.published=!team.published; team.publishedAt=team.published?new Date().toISOString():null; await saveTeam(id); if(team.published){const ev=events.find(e=>e.id===id);await sendPushNotification('team-announced','Team Announced',ev?ev.title+' team has been published':'The team has been published',{url:'/?portal=parent',eventId:id});} showToast(team.published?'Team published':'Team unpublished'); await renderSelection(); });
   }
   function attachCardHandlers(){
     document.querySelectorAll('[data-toggle]').forEach(el => {
@@ -1361,6 +1279,7 @@
         sc.log.push({ team, type, scorer, matchSeconds: currentElapsed(sc), time: new Date().toISOString() });
         if(sc.status === 'scheduled') sc.status = 'live';
         await saveScore(evId);
+        await sendPushNotification('score',type==='Try'?'Try Scored':'Score Update',(scorer?scorer+' · ':'')+sc.homeName+' '+sc.home+' - '+sc.away+' '+sc.awayName,{url:'/?portal=parent',eventId:evId});
         showToast(`${LABELS[type]} recorded`);
         render();
       });
@@ -1428,6 +1347,9 @@
           sc.period = 'Full Time';
         }
         await saveScore(evId);
+        const sev=events.find(e=>e.id===evId);
+        if(sc.status==='live')await sendPushNotification('game-live','Game Live',(sev?sev.title:sc.homeName+' v '+sc.awayName)+' is now live',{url:'/?portal=parent',eventId:evId});
+        if(sc.status==='final')await sendPushNotification('full-time','Full Time',sc.homeName+' '+sc.home+' - '+sc.away+' '+sc.awayName,{url:'/?portal=parent',eventId:evId});
         showToast(sc.status === 'live' ? 'Match is live' : sc.status === 'final' ? 'Full time recorded' : 'Match reset to scheduled');
         render();
       });
@@ -1661,6 +1583,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
       };
       await saveScore(ev.id);
     }
+    await sendPushNotification(newType==='match'?'fixture-added':'training-added',newType==='match'?'New Fixture Added':'Training Added',title+' · '+fmtDate(date,time)+(location?' · '+location:''),{url:'/?portal=parent',eventId:ev.id});
     document.getElementById('f-title').value = '';
     document.getElementById('f-opponent').value = '';
     document.getElementById('f-location').value = '';
@@ -1672,12 +1595,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     render();
   });
 
-
-  window.addEventListener('boyne-notification', (event) => {
-    const detail = event.detail || {};
-    showToast((detail.title || 'Boyne RFC U13') + ': ' + (detail.body || 'New team update'));
-    refreshLive();
-  });
+  window.addEventListener('boyne-notification',e=>{const d=e.detail||{};showToast((d.title||'Boyne RFC U13')+': '+(d.body||'New team update'));refreshLive();});
   // Poll for live updates from other users
   async function refreshLive(){
     await loadEvents();
