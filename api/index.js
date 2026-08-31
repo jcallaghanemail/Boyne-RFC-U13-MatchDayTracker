@@ -1,3 +1,3 @@
-require('./functions/store');
-require('./functions/registerDevice');
-require('./functions/sendNotification');
+require('./src/functions/store');
+require('./src/functions/registerDevice');
+require('./src/functions/sendNotification');
