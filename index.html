@@ -101,6 +101,17 @@
   .poll-actions button{flex:1;padding:9px;border-radius:8px;font-family:'Oswald';font-weight:700;cursor:pointer;}
   .poll-toggle{border:1px solid var(--pitch-mid);background:var(--pitch-mid);color:#fff;}
   .poll-delete{border:1px solid var(--no);background:#fff;color:var(--no);}
+  .poll-response-summary{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);}
+  .poll-summary-title{font-family:'Oswald';font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--pitch-deep);margin-bottom:8px;}
+  .poll-progress-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;font-size:11px;font-weight:700;}
+  .poll-progress-pill{padding:4px 7px;border-radius:10px;background:var(--no-bg);color:var(--no);}
+  .poll-progress-pill.amber{background:var(--maybe-bg);color:var(--maybe);}
+  .poll-progress-pill.green{background:var(--going-bg);color:var(--going);}
+  .poll-answer-group{margin-top:9px;padding:9px 10px;background:#F6F3EA;border:1px solid var(--line);border-radius:8px;}
+  .poll-answer-heading{font-size:11px;font-weight:700;color:var(--ink);margin-bottom:4px;}
+  .poll-answer-names{font-size:11px;line-height:1.45;color:var(--ink-soft);overflow-wrap:anywhere;}
+  .poll-no-response{margin-top:9px;padding:9px 10px;background:var(--no-bg);border:1px solid #E2B2AC;border-radius:8px;}
+  .poll-export{width:100%;margin-top:10px;border:1px solid var(--pitch-mid);background:#fff;color:var(--pitch-mid);border-radius:8px;padding:9px;font-family:'Oswald';font-size:11px;font-weight:700;cursor:pointer;}
   .options-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;}
   .options-title{font-family:'Oswald';font-size:15px;font-weight:700;text-transform:uppercase;color:var(--pitch-deep);margin-bottom:7px;}
   .options-copy{font-size:12px;line-height:1.5;color:var(--ink-soft);margin-bottom:14px;}
@@ -952,6 +963,18 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   function statusLabel(s){ return s === 'going' ? 'Available' : s === 'maybe' ? 'Unsure' : 'Not Available'; }
   function statusClass(s){ return s === 'going' ? 'g' : s === 'maybe' ? 'm' : 'n'; }
 
+  function exportPollResponses(poll){
+    const votes=pollVotes[poll.id]||{};
+    const optionById=Object.fromEntries((poll.options||[]).map(o=>[o.id,o.text]));
+    const rows=[['Player','Response']];
+    roster.forEach(name=>rows.push([name,optionById[votes[name]]||'No response']));
+    Object.keys(votes).filter(name=>!roster.includes(name)).sort((a,b)=>a.localeCompare(b)).forEach(name=>rows.push([name,optionById[votes[name]]||'No response']));
+    const csv=rows.map(row=>row.map(value=>'"'+String(value||'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='poll-responses-'+String(poll.question||'poll').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'.csv';
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
   function renderPolls(){
     const el=document.getElementById('polls-content');
     let html='<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Team Polls</div>';
@@ -966,7 +989,14 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         if(!selectedChild) html+='<div class="options-copy">Select your child above to respond.</div>';
         p.options.forEach(o=>html+='<button class="poll-option '+(mine===o.id?'selected':'')+'" data-poll="'+p.id+'" data-option="'+o.id+'" '+(!p.open||!selectedChild?'disabled':'')+'>'+escapeHtml(o.text)+(mine===o.id?' ✓':'')+'</button>');
       }else{
+        const answeredNames=Object.keys(votes).filter(name=>p.options.some(o=>o.id===votes[name])).sort((a,b)=>a.localeCompare(b));
+        const notAnswered=roster.filter(name=>!answeredNames.includes(name));
+        const responsePct=roster.length?Math.round((answeredNames.filter(name=>roster.includes(name)).length/roster.length)*100):0;
+        const progressClass=responsePct>=75?'green':responsePct>=40?'amber':'';
         p.options.forEach(o=>{const count=counts[o.id]||0,pct=total?Math.round(count*100/total):0;html+='<div class="poll-result"><div class="poll-result-head"><span>'+escapeHtml(o.text)+'</span><span>'+count+' ('+pct+'%)</span></div><div class="poll-bar"><div class="poll-fill" style="width:'+pct+'%"></div></div></div>';});
+        html+='<div class="poll-response-summary"><div class="poll-summary-title">Response Summary</div><div class="poll-progress-row"><span>'+answeredNames.length+' answered · '+notAnswered.length+' not answered</span><span class="poll-progress-pill '+progressClass+'">'+responsePct+'% response</span></div>';
+        p.options.forEach(o=>{const names=Object.keys(votes).filter(name=>votes[name]===o.id).sort((a,b)=>a.localeCompare(b));html+='<div class="poll-answer-group"><div class="poll-answer-heading">'+escapeHtml(o.text)+' ('+names.length+')</div><div class="poll-answer-names">'+(names.length?names.map(escapeHtml).join(', '):'No responses')+'</div></div>';});
+        html+='<div class="poll-no-response"><div class="poll-answer-heading">Not Answered ('+notAnswered.length+')</div><div class="poll-answer-names">'+(notAnswered.length?notAnswered.map(escapeHtml).join(', '):'Everyone has responded')+'</div></div><button class="poll-export" data-export-poll="'+p.id+'">Export Responses</button></div>';
         html+='<div class="poll-actions"><button class="poll-toggle" data-toggle-poll="'+p.id+'">'+(p.open?'Close Poll':'Reopen Poll')+'</button><button class="poll-delete" data-delete-poll="'+p.id+'">Delete</button></div>';
       }
       html+='</div>';
@@ -977,6 +1007,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const child=document.getElementById('poll-child'); if(child) child.onchange=async()=>{selectedChild=child.value;if(selectedChild)await rememberChildName(selectedChild);renderPolls();};
     const pq=document.getElementById('poll-question'); const po=document.getElementById('poll-options'); if(pq){pq.oninput=()=>{pollDraftQuestion=pq.value;localStorage.setItem('poll-draft-question',pollDraftQuestion);};pq.onkeydown=e=>e.stopPropagation();} if(po){po.oninput=()=>{pollDraftOptions=po.value;localStorage.setItem('poll-draft-options',pollDraftOptions);};po.onkeydown=e=>e.stopPropagation();} const create=document.getElementById('create-poll'); if(create) create.onclick=async()=>{const q=document.getElementById('poll-question').value.trim(),opts=document.getElementById('poll-options').value.split(/\n/).map(x=>x.trim()).filter(Boolean);if(!q){showToast('Add a poll question');return;}if(opts.length<2){showToast('Add at least two options');return;}polls.push({id:uid(),question:q,options:opts.map(text=>({id:uid(),text})),open:true,createdAt:new Date().toISOString()});pollDraftQuestion='';pollDraftOptions='';localStorage.removeItem('poll-draft-question');localStorage.removeItem('poll-draft-options');await savePolls();showToast('Poll created');renderPolls();};
     document.querySelectorAll('[data-poll]').forEach(b=>b.onclick=async()=>{if(role!=='parent'||!selectedChild)return;const id=b.getAttribute('data-poll'),poll=polls.find(x=>x.id===id);if(!poll||!poll.open)return;if(!pollVotes[id])pollVotes[id]={};pollVotes[id][selectedChild]=b.getAttribute('data-option');await savePolls();showToast('Response saved for '+selectedChild);renderPolls();});
+    document.querySelectorAll('[data-export-poll]').forEach(b=>b.onclick=()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-export-poll'));if(p)exportPollResponses(p);});
     document.querySelectorAll('[data-toggle-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-toggle-poll'));if(!p)return;p.open=!p.open;await savePolls();showToast(p.open?'Poll reopened':'Poll closed');renderPolls();});
     document.querySelectorAll('[data-delete-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach'||!confirm('Delete this poll and all responses?'))return;const id=b.getAttribute('data-delete-poll');polls=polls.filter(x=>x.id!==id);delete pollVotes[id];await savePolls();showToast('Poll deleted');renderPolls();});
   }
