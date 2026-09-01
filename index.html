@@ -80,14 +80,34 @@
 
   /* Navigation */
   .app-tabs{display:none; gap:6px; padding:10px 16px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20;}
-  .app-tabs.show{display:flex;}
+  .app-tabs.show{display:flex;flex-wrap:wrap;}
+  .app-tabs.coach-view .app-tab{flex:1 1 calc(25% - 6px);}
   .app-tab{flex:1; border:1px solid var(--line); background:#fff; color:var(--ink-soft); border-radius:8px; padding:9px 5px; font-family:'Oswald'; font-weight:600; font-size:12px; cursor:pointer;}
   .app-tab.active{background:var(--pitch-deep); color:#fff; border-color:var(--pitch-deep);}
   .app-tab.coach-only{display:none;}
   .app-tabs.coach-view .app-tab.coach-only{display:block;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
-  .selection-page,.history-page,.options-page,.polls-page{padding:16px;}
+  .selection-page,.history-page,.options-page,.polls-page,.dashboard-page,.stats-page{padding:16px;}
+  .dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .dashboard-metric{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px;}
+  .dashboard-number{font-family:'JetBrains Mono';font-size:24px;font-weight:700;color:var(--pitch-deep);}
+  .dashboard-label{font-size:10.5px;color:var(--ink-soft);margin-top:3px;}
+  .dashboard-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:11px;}
+  .dashboard-card-title{font-family:'Oswald';font-weight:700;font-size:14px;color:var(--pitch-deep);margin-bottom:8px;}
+  .dashboard-action{padding:9px 0;border-bottom:1px solid var(--line);font-size:11.5px;line-height:1.4;}
+  .dashboard-action:last-child{border-bottom:none;}
+  .dashboard-action strong{color:var(--ink);}
+  .dashboard-ok{padding:11px;background:var(--going-bg);color:var(--going);border-radius:8px;font-size:11.5px;font-weight:700;}
+  .stats-toolbar{margin-bottom:12px;}
+  .stats-toolbar select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-family:inherit;}
+  .stats-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:11px;}
+  .stats-player{font-family:'Oswald';font-size:16px;font-weight:700;color:var(--pitch-deep);margin-bottom:10px;}
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .stats-item{padding:9px;background:#F6F3EA;border:1px solid var(--line);border-radius:8px;}
+  .stats-value{font-family:'JetBrains Mono';font-size:17px;font-weight:700;color:var(--pitch-deep);}
+  .stats-label{font-size:9.5px;color:var(--ink-soft);margin-top:2px;}
+  .stats-note{font-size:10px;color:var(--ink-soft);margin-top:9px;line-height:1.4;}
   .poll-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
   .poll-title{font-family:'Oswald';font-size:15px;font-weight:700;color:var(--pitch-deep);margin-bottom:5px;}
   .poll-meta{font-size:11px;color:var(--ink-soft);margin-bottom:10px;}
@@ -454,9 +474,11 @@
     <div class="notification-row"><button id="enable-push-btn" class="notification-btn" type="button">🔔 Enable Notifications</button><span id="notification-status" class="notification-status">Notifications are off</span></div>
   </div>
   <div class="app-tabs" id="app-tabs">
+    <button class="app-tab coach-only" data-tab="dashboard">Dashboard</button>
     <button class="app-tab active" data-tab="fixtures">Fixtures</button>
     <button class="app-tab coach-only" data-tab="squad">Squad</button>
     <button class="app-tab coach-only" data-tab="selection">Selection</button>
+    <button class="app-tab coach-only" data-tab="stats">Stats</button>
     <button class="app-tab" data-tab="history">History</button>
     <button class="app-tab" data-tab="polls">Polls</button>
     <button class="app-tab" data-tab="options">Options</button>
@@ -532,7 +554,9 @@
       <button class="primary-btn" id="f-submit">Save to schedule</button>
     </div>
   </div>
+  <div class="dashboard-page" id="dashboard-content" style="display:none;"></div>
   <div class="selection-page" id="selection-content" style="display:none;"></div>
+  <div class="stats-page" id="stats-content" style="display:none;"></div>
   <div class="history-page" id="history-content" style="display:none;"></div>
   <div class="polls-page" id="polls-content" style="display:none;"></div>
   <div class="options-page" id="options-content" style="display:none;">
@@ -632,8 +656,9 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let selectedCoach = '';   // chosen from the coaching staff dropdown
   let parentName = localStorage.getItem('parent-display-name') || '';
   let loaded = false;
-  let activeTab = 'fixtures';
+  let activeTab = PORTAL_MODE === 'coach' ? 'dashboard' : 'fixtures';
   let selectionEventId = null;
+  let selectedStatsPlayer = '';
   let selectedPitchSlot = null;
   let teamCache = {};
   let checkinCache = {}; // eventId -> { playerName: {checkedIn, updatedAt} }
@@ -1031,6 +1056,79 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.querySelectorAll('[data-toggle-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-toggle-poll'));if(!p)return;p.open=!p.open;await savePolls();showToast(p.open?'Poll reopened':'Poll closed');renderPolls();});
     document.querySelectorAll('[data-delete-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach'||!confirm('Delete this poll and all responses?'))return;const id=b.getAttribute('data-delete-poll');polls=polls.filter(x=>x.id!==id);delete pollVotes[id];await savePolls();showToast('Poll deleted');renderPolls();});
   }
+  async function ensureEventData(ev){
+    await Promise.all([loadRsvp(ev.id),loadCoachRsvp(ev.id),loadCheckin(ev.id)]);
+    if(ev.type==='match') await Promise.all([loadScore(ev.id),loadTeam(ev.id)]);
+  }
+  async function renderDashboard(){
+    const el=document.getElementById('dashboard-content');
+    const upcoming=events.filter(ev=>!isHistoryEvent(ev));
+    await Promise.all(upcoming.map(ensureEventData));
+    const openPolls=polls.filter(p=>p.open);
+    let missingRsvps=0, unsure=0, unpublished=0, pendingPollResponses=0;
+    const actions=[];
+    upcoming.forEach(ev=>{
+      const rs=rsvpCache[ev.id]||{};
+      const missing=roster.filter(name=>!rs[name]);
+      const maybe=roster.filter(name=>rs[name]&&rs[name].status==='maybe');
+      missingRsvps+=missing.length; unsure+=maybe.length;
+      if(missing.length) actions.push('<strong>'+escapeHtml(ev.title)+':</strong> '+missing.length+' player'+(missing.length===1?' has':'s have')+' not responded');
+      if(maybe.length) actions.push('<strong>'+escapeHtml(ev.title)+':</strong> '+maybe.length+' player'+(maybe.length===1?' is':'s are')+' unsure');
+      if(ev.type==='match'){
+        const team=teamCache[ev.id]||{};
+        if(!team.published){unpublished++;actions.push('<strong>'+escapeHtml(ev.title)+':</strong> team has not been published');}
+      }
+    });
+    openPolls.forEach(p=>{
+      const votes=pollVotes[p.id]||{};
+      const pending=roster.filter(name=>!votes[name]).length;
+      pendingPollResponses+=pending;
+      if(pending) actions.push('<strong>Poll: '+escapeHtml(p.question)+':</strong> '+pending+' response'+(pending===1?'':'s')+' outstanding');
+    });
+    const next=upcoming.slice().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];
+    el.innerHTML='<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Coach Dashboard</div>'+
+      '<div class="dashboard-grid"><div class="dashboard-metric"><div class="dashboard-number">'+upcoming.length+'</div><div class="dashboard-label">Upcoming sessions</div></div><div class="dashboard-metric"><div class="dashboard-number">'+missingRsvps+'</div><div class="dashboard-label">Outstanding RSVPs</div></div><div class="dashboard-metric"><div class="dashboard-number">'+unpublished+'</div><div class="dashboard-label">Teams not published</div></div><div class="dashboard-metric"><div class="dashboard-number">'+pendingPollResponses+'</div><div class="dashboard-label">Pending poll responses</div></div></div>'+
+      (next?'<div class="dashboard-card"><div class="dashboard-card-title">Next Session</div><div class="dashboard-action"><strong>'+escapeHtml(next.title)+'</strong><br>'+escapeHtml(fmtDate(next.date,next.time))+(next.location?' · '+escapeHtml(next.location):'')+'</div></div>':'')+
+      '<div class="dashboard-card"><div class="dashboard-card-title">Actions</div>'+(actions.length?actions.map(a=>'<div class="dashboard-action">⚠ '+a+'</div>').join(''):'<div class="dashboard-ok">✓ No outstanding actions across upcoming sessions and open polls.</div>')+'</div>';
+  }
+  async function calculatePlayerStats(name){
+    const history=events.filter(isHistoryEvent);
+    await Promise.all(history.map(ensureEventData));
+    let matchesPlayed=0, trainingAttended=0, trainingSessions=0, tries=0, conversions=0, penalties=0, dropGoals=0, points=0;
+    history.forEach(ev=>{
+      const checked=!!(checkinCache[ev.id]&&checkinCache[ev.id][name]&&checkinCache[ev.id][name].checkedIn);
+      if(ev.type==='training'){
+        trainingSessions++;
+        if(checked) trainingAttended++;
+      }else if(ev.type==='match'){
+        const team=teamCache[ev.id]||{positions:{},subs:[]};
+        const selected=Object.values(team.positions||{}).includes(name)||(team.subs||[]).includes(name);
+        if(checked||selected) matchesPlayed++;
+        const sc=scoreCache[ev.id]||{};
+        (sc.log||[]).filter(item=>item.team==='home'&&item.scorer===name).forEach(item=>{
+          if(item.type==='Try')tries++;
+          if(item.type==='Con')conversions++;
+          if(item.type==='Pen')penalties++;
+          if(item.type==='DG')dropGoals++;
+          points+=POINTS[item.type]||0;
+        });
+      }
+    });
+    return {matchesPlayed,trainingAttended,trainingSessions,trainingPct:trainingSessions?Math.round(trainingAttended*100/trainingSessions):null,tries,conversions,penalties,dropGoals,points};
+  }
+  async function renderStats(){
+    const el=document.getElementById('stats-content');
+    if(selectedStatsPlayer&&!roster.includes(selectedStatsPlayer)) selectedStatsPlayer='';
+    let html='<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Player Statistics</div><div class="stats-toolbar"><select id="stats-player"><option value="">All players</option>'+roster.map(name=>'<option value="'+escapeAttr(name)+'" '+(name===selectedStatsPlayer?'selected':'')+'>'+escapeHtml(name)+'</option>').join('')+'</select></div>';
+    const names=selectedStatsPlayer?[selectedStatsPlayer]:roster;
+    if(!names.length) html+='<div class="empty-state"><div class="big">No players yet</div><div>Add players in Squad to build statistics.</div></div>';
+    for(const name of names){
+      const st=await calculatePlayerStats(name);
+      html+='<div class="stats-card"><div class="stats-player">'+escapeHtml(name)+'</div><div class="stats-grid"><div class="stats-item"><div class="stats-value">'+st.matchesPlayed+'</div><div class="stats-label">Matches played</div></div><div class="stats-item"><div class="stats-value">'+(st.trainingPct===null?'—':st.trainingPct+'%')+'</div><div class="stats-label">Training attendance</div></div><div class="stats-item"><div class="stats-value">'+st.tries+'</div><div class="stats-label">Tries</div></div><div class="stats-item"><div class="stats-value">'+st.conversions+'</div><div class="stats-label">Conversions</div></div><div class="stats-item"><div class="stats-value">'+st.points+'</div><div class="stats-label">Total points</div></div><div class="stats-item"><div class="stats-value">'+st.trainingAttended+'/'+st.trainingSessions+'</div><div class="stats-label">Training attended</div></div></div><div class="stats-note">Match appearances use check-in or published team selection. Scoring totals use named Boyne scoring events recorded in match history.</div></div>';
+    }
+    el.innerHTML=html;
+    const select=document.getElementById('stats-player');if(select)select.onchange=async()=>{selectedStatsPlayer=select.value;await renderStats();};
+  }
   function renderOptions(){
     const button = document.getElementById('notifications-off-btn');
     const status = document.getElementById('options-notification-status');
@@ -1053,7 +1151,9 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     tabs.classList.toggle('coach-view', role === 'coach');
     document.querySelectorAll('.app-tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === activeTab));
     document.getElementById('content').style.display = activeTab === 'fixtures' ? 'block' : 'none';
+    document.getElementById('dashboard-content').style.display = role === 'coach' && activeTab === 'dashboard' ? 'block' : 'none';
     document.getElementById('selection-content').style.display = role === 'coach' && activeTab === 'selection' ? 'block' : 'none';
+    document.getElementById('stats-content').style.display = role === 'coach' && activeTab === 'stats' ? 'block' : 'none';
     document.getElementById('history-content').style.display = activeTab === 'history' ? 'block' : 'none';
     document.getElementById('options-content').style.display = activeTab === 'options' ? 'block' : 'none';
     document.getElementById('polls-content').style.display = activeTab === 'polls' ? 'block' : 'none';
@@ -1061,6 +1161,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.getElementById('roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     document.getElementById('coach-roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     if(role === 'coach'){ renderRosterChips(); renderCoachRosterChips(); }
+    if(role === 'coach' && activeTab === 'dashboard'){await renderDashboard();return;}
+    if(role === 'coach' && activeTab === 'stats'){await renderStats();return;}
     if(role === 'coach' && activeTab === 'selection') await renderSelection();
     if(activeTab === 'history'){
       await renderHistory();
@@ -1882,7 +1984,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
   });
   // Role toggle and coach navigation
   document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','polls','options'].includes(activeTab)) activeTab='fixtures'; render(); });
-  document.getElementById('role-coach').addEventListener('click', () => { if(PARENT_ONLY) return; role = 'coach'; render(); });
+  document.getElementById('role-coach').addEventListener('click', () => { if(PARENT_ONLY) return; role = 'coach'; activeTab='dashboard'; render(); });
   document.querySelectorAll('.app-tab').forEach(btn => btn.addEventListener('click', () => { activeTab=btn.getAttribute('data-tab'); openEventId=null; render(); }));
 
   // Roster management (coach)
@@ -2026,7 +2128,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
         }
       }
     }
-    if(role === 'coach' && activeTab === 'selection'){
+    if(role === 'coach' && (activeTab === 'selection' || activeTab === 'dashboard' || activeTab === 'stats')){
       for(const ev of events.filter(e => e.type === 'match')){
         await loadRsvp(ev.id);
         await loadCoachRsvp(ev.id);
