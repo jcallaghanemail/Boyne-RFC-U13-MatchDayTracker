@@ -57,6 +57,12 @@
     line-height:1;
   }
   .brand-text .tag{font-size:11px; letter-spacing:1.5px; text-transform:uppercase; opacity:0.75; margin-top:3px;}
+  .header-identity{margin-left:auto;min-width:112px;max-width:155px;text-align:right;}
+  .identity-label{font-family:'Oswald';font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:#F4C38C;margin-bottom:2px;}
+  .identity-value{font-size:11px;font-weight:700;color:#fff;line-height:1.25;overflow-wrap:anywhere;}
+  .identity-player{font-size:9.5px;color:rgba(255,255,255,.8);margin-top:3px;overflow-wrap:anywhere;}
+  .identity-edit{width:100%;margin-top:5px;padding:5px 6px;border:1px solid rgba(255,255,255,.45);border-radius:6px;background:rgba(255,255,255,.96);color:#111;font-family:inherit;font-size:10.5px;}
+  @media(max-width:410px){.header-top{align-items:flex-start;flex-wrap:wrap}.header-identity{order:3;width:100%;max-width:none;text-align:left;margin-left:68px}.role-toggle{margin-left:auto}}
 
   .role-toggle{
     display:flex; background:rgba(255,255,255,0.12); border-radius:20px; padding:3px;
@@ -441,6 +447,7 @@
           <div class="tag">Matchday Tracker</div>
         </div>
       </div>
+      <div class="header-identity" id="header-identity"></div>
       <div class="role-toggle">
         <button id="role-parent" class="active">Parent</button>
         <button id="role-coach">Coach</button>
@@ -626,6 +633,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let coachRsvpCache = {}; // eventId -> data
   let selectedChild = '';   // chosen from the team roster dropdown
   let selectedCoach = '';   // chosen from the coaching staff dropdown
+  let parentName = localStorage.getItem('parent-display-name') || '';
   let loaded = false;
   let activeTab = 'fixtures';
   let selectionEventId = null;
@@ -893,6 +901,24 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const el = document.getElementById('child-strip');
     el.innerHTML = '';
     el.style.display = 'none';
+    renderHeaderIdentity();
+  }
+  function renderHeaderIdentity(){
+    const el=document.getElementById('header-identity');
+    if(!el) return;
+    if(role==='coach'){
+      el.innerHTML='<div class="identity-label">Coach</div><div class="identity-value">'+(selectedCoach?escapeHtml(selectedCoach):'Select coach')+'</div><select class="identity-edit" id="header-coach-select"><option value="">— choose coach —</option>'+coachRoster.map(name=>'<option value="'+escapeAttr(name)+'" '+(name===selectedCoach?'selected':'')+'>'+escapeHtml(name)+'</option>').join('')+'</select>';
+      const select=document.getElementById('header-coach-select');
+      if(select) select.onchange=async()=>{selectedCoach=select.value;if(selectedCoach)await rememberCoachName(selectedCoach);renderHeaderIdentity();};
+    }else{
+      el.innerHTML='<div class="identity-label">Parent</div><div class="identity-value">'+(parentName?escapeHtml(parentName):'Add your name')+'</div>'+(selectedChild?'<div class="identity-player">Player: '+escapeHtml(selectedChild)+'</div>':'')+'<input class="identity-edit" id="header-parent-name" maxlength="60" placeholder="Parent name" value="'+escapeAttr(parentName)+'">';
+      const input=document.getElementById('header-parent-name');
+      if(input){
+        input.oninput=()=>{parentName=input.value.trimStart();localStorage.setItem('parent-display-name',parentName);};
+        input.onchange=()=>{parentName=input.value.trim();localStorage.setItem('parent-display-name',parentName);renderHeaderIdentity();};
+        input.onkeydown=e=>{e.stopPropagation();if(e.key==='Enter'){input.blur();}};
+      }
+    }
   }
   function renderRosterChips(){
     const chips = document.getElementById('roster-chips');
@@ -1254,7 +1280,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
             ${ev.rsvpLocked ? '<div class="rsvp-closed">Going responses are now closed by the coach. Existing confirmations remain recorded.</div>' : ''}
             <div class="parent-name-wrap">
               <label>Who is confirming attendance?</label>
-              <input class="parent-name-input" data-parent-for="${ev.id}" placeholder="Parent or guardian name" value="${escapeAttr(mine && mine.confirmedBy ? mine.confirmedBy : '')}">
+              <input class="parent-name-input" data-parent-for="${ev.id}" placeholder="Parent or guardian name" value="${escapeAttr(mine && mine.confirmedBy ? mine.confirmedBy : parentName)}">
             </div>
             <div class="rsvp-self">
               <div class="status-pick">
@@ -1820,14 +1846,15 @@ This permanently removes this history record and its RSVPs, attendance, score, c
           return;
         }
         const parentInput = document.querySelector('.parent-name-input[data-parent-for="' + evId + '"]');
-        const parentName = parentInput ? parentInput.value.trim() : '';
-        if(status === 'going' && !parentName){
+        const confirmingParent = parentInput ? parentInput.value.trim() : parentName.trim();
+        if(confirmingParent){ parentName=confirmingParent; localStorage.setItem('parent-display-name',parentName); }
+        if(status === 'going' && !confirmingParent){
           showToast('Add the parent or guardian name first');
           if(parentInput) parentInput.focus();
           return;
         }
         if(!rsvpCache[evId]) rsvpCache[evId] = {};
-        rsvpCache[evId][child] = { status, confirmedBy: parentName, updatedAt: new Date().toISOString() };
+        rsvpCache[evId][child] = { status, confirmedBy: confirmingParent, updatedAt: new Date().toISOString() };
         await saveRsvp(evId);
         await rememberChildName(child);
         showToast('RSVP saved for ' + child);
