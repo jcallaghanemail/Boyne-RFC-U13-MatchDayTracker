@@ -84,7 +84,13 @@
   .app-tabs.coach-view .app-tab.coach-only{display:block;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
-  .selection-page,.history-page{padding:16px;}
+  .selection-page,.history-page,.options-page{padding:16px;}
+  .options-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;}
+  .options-title{font-family:'Oswald';font-size:15px;font-weight:700;text-transform:uppercase;color:var(--pitch-deep);margin-bottom:7px;}
+  .options-copy{font-size:12px;line-height:1.5;color:var(--ink-soft);margin-bottom:14px;}
+  .notifications-off-btn{width:100%;border:1px solid var(--no);background:#fff;color:var(--no);border-radius:8px;padding:10px;font-family:'Oswald';font-size:12px;font-weight:700;cursor:pointer;}
+  .notifications-off-btn:disabled{opacity:.55;cursor:not-allowed;}
+  .options-status{font-size:11px;color:var(--ink-soft);margin-top:9px;text-align:center;}
   .checkin-panel{margin:14px 0;padding:12px;background:#EEF5F0;border:1px solid #B8D0C0;border-radius:10px;}
   .checkin-title{font-family:'Oswald';font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--pitch-deep);margin-bottom:8px;}
   .checkin-summary{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
@@ -415,6 +421,7 @@
     <button class="app-tab coach-only" data-tab="squad">Squad</button>
     <button class="app-tab coach-only" data-tab="selection">Selection</button>
     <button class="app-tab" data-tab="history">History</button>
+    <button class="app-tab" data-tab="options">Options</button>
   </div>
 
   <div id="content">
@@ -489,6 +496,14 @@
   </div>
   <div class="selection-page" id="selection-content" style="display:none;"></div>
   <div class="history-page" id="history-content" style="display:none;"></div>
+  <div class="options-page" id="options-content" style="display:none;">
+    <div class="options-card">
+      <div class="options-title">Notification Options</div>
+      <div class="options-copy">Turn off push notifications on this device. You can enable them again at any time using the button at the top of the app.</div>
+      <button class="notifications-off-btn" id="notifications-off-btn" type="button">🔕 Turn Off Notifications</button>
+      <div class="options-status" id="options-notification-status"></div>
+    </div>
+  </div>
 
 </div>
 
@@ -496,7 +511,7 @@
 
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import {getMessaging,getToken,isSupported,onMessage} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+import {getMessaging,getToken,deleteToken,isSupported,onMessage} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
 const firebaseConfig={apiKey:"AIzaSyBlT2UKLGBum9xTFmNusQHv9IRastAQqaA",authDomain:"boyne-rugby-tracker.firebaseapp.com",projectId:"boyne-rugby-tracker",storageBucket:"boyne-rugby-tracker.firebasestorage.app",messagingSenderId:"64724348826",appId:"1:64724348826:web:c71a4eee5b0121e412d423"};
 const vapidKey="BLbZancYiPj__47LlZoDppMxnpa-R3LcUKmGKTZH2ESCNbvC44oszPhUDwHCCW2lC_8k5WizW16VLe6Sw3jXSZI";
 const button=document.getElementById('enable-push-btn'),status=document.getElementById('notification-status');
@@ -506,6 +521,23 @@ async function setup(){
  if(Object.values(firebaseConfig).some(v=>v.startsWith('YOUR_'))||vapidKey==='YOUR_VAPID_KEY'){state('Firebase settings required');return;}
  const messaging=getMessaging(initializeApp(firebaseConfig));
  const sw=await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+ window.boyneDisableNotifications=async()=>{
+   try{
+     const token=localStorage.getItem('boyneFCMToken');
+     await deleteToken(messaging);
+     localStorage.removeItem('boyneFCMToken');
+     localStorage.removeItem('boyneFCMRole');
+     if(token){
+       try{await fetch('/api/register-device',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});}catch(e){console.warn('Device removal endpoint unavailable',e);}
+     }
+     state('Notifications are off');
+     button.disabled=false;
+     return true;
+   }catch(e){
+     console.error(e);
+     return false;
+   }
+ };
  button.onclick=async()=>{try{button.disabled=true;status.textContent='Enabling notifications…';if(await Notification.requestPermission()!=='granted')throw new Error('Permission not granted');const token=await getToken(messaging,{vapidKey,serviceWorkerRegistration:sw});if(!token)throw new Error('No token returned');const portalRole=new URLSearchParams(location.search).get('portal')||'coach';localStorage.setItem('boyneFCMToken',token);localStorage.setItem('boyneFCMRole',portalRole);const r=await fetch('/api/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,role:portalRole})});if(!r.ok)throw new Error(await r.text());console.log('Boyne FCM token:',token);state('Notifications are enabled',true);}catch(e){console.error(e);state('Could not enable notifications');button.disabled=false;}};
  onMessage(messaging,p=>window.dispatchEvent(new CustomEvent('boyne-notification',{detail:{title:p.notification?.title||'Boyne RFC U13',body:p.notification?.body||'New team update'}})));
  if(Notification.permission==='granted'&&localStorage.getItem('boyneFCMToken'))state('Notifications are enabled',true);
@@ -881,13 +913,21 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   function statusLabel(s){ return s === 'going' ? 'Available' : s === 'maybe' ? 'Unsure' : 'Not Available'; }
   function statusClass(s){ return s === 'going' ? 'g' : s === 'maybe' ? 'm' : 'n'; }
 
+  function renderOptions(){
+    const button = document.getElementById('notifications-off-btn');
+    const status = document.getElementById('options-notification-status');
+    const enabled = Notification.permission === 'granted' && !!localStorage.getItem('boyneFCMToken');
+    button.disabled = !enabled;
+    button.textContent = enabled ? '🔕 Turn Off Notifications' : 'Notifications Are Off';
+    status.textContent = enabled ? 'Push notifications are enabled on this device.' : 'Push notifications are currently off on this device.';
+  }
   async function render(){
     document.body.classList.toggle('parent-only', PARENT_ONLY);
-    if(PARENT_ONLY){ role = 'parent'; if(!['fixtures','history'].includes(activeTab)) activeTab = 'fixtures'; }
+    if(PARENT_ONLY){ role = 'parent'; if(!['fixtures','history','options'].includes(activeTab)) activeTab = 'fixtures'; }
     renderChildStrip();
     document.getElementById('role-parent').classList.toggle('active', role === 'parent');
     document.getElementById('role-coach').classList.toggle('active', role === 'coach');
-    if(role !== 'coach' && !['fixtures','history'].includes(activeTab)) activeTab = 'fixtures';
+    if(role !== 'coach' && !['fixtures','history','options'].includes(activeTab)) activeTab = 'fixtures';
     const tabs = document.getElementById('app-tabs');
     tabs.classList.add('show');
     tabs.classList.toggle('coach-view', role === 'coach');
@@ -895,6 +935,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.getElementById('content').style.display = activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('selection-content').style.display = role === 'coach' && activeTab === 'selection' ? 'block' : 'none';
     document.getElementById('history-content').style.display = activeTab === 'history' ? 'block' : 'none';
+    document.getElementById('options-content').style.display = activeTab === 'options' ? 'block' : 'none';
     document.getElementById('add-event-card').style.display = role === 'coach' && activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     document.getElementById('coach-roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
@@ -902,6 +943,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     if(role === 'coach' && activeTab === 'selection') await renderSelection();
     if(activeTab === 'history'){
       await renderHistory();
+      return;
+    }
+    if(activeTab === 'options'){
+      renderOptions();
       return;
     }
 
@@ -1232,7 +1277,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
             <div class="event-title">${escapeHtml(ev.title)}</div>
             <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}</div>
             ${safeMapUrl(ev.mapLink) ? `<a class="map-link" href="${escapeAttr(safeMapUrl(ev.mapLink))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">View in Google Maps</a>` : ''}
-            ${!isHistoryEvent(ev) ? `<div class="calendar-actions"><button class="calendar-btn" data-add-calendar="${ev.id}">📅 Add to Calendar</button>${role === 'coach' ? `<button class="calendar-btn" data-send-reminder="${ev.id}">🔔 Send Reminder</button>` : ''}</div>` : ''}
+            ${!isHistoryEvent(ev) ? `<div class="calendar-actions"><button class="calendar-btn" data-add-calendar="${ev.id}">📅 Add to Calendar</button></div>` : ''}
             ${ev.archived ? '<span class="archived-badge">Archived</span>' : ''}
             ${summaryHtml}
           </div>
@@ -1388,23 +1433,6 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         openEventId = null;
         showToast('Match moved to History');
         await render();
-      });
-    });
-    document.querySelectorAll('[data-send-reminder]').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if(role !== 'coach') return;
-        const evId = btn.getAttribute('data-send-reminder');
-        const ev = events.find(item => item.id === evId);
-        if(!ev || isHistoryEvent(ev)) return;
-        if(!confirm('Send a reminder for "' + ev.title + '" to all subscribed users?')) return;
-        btn.disabled = true;
-        const title = ev.type === 'match' ? 'Fixture Reminder' : 'Training Reminder';
-        const action = ev.type === 'match' ? 'Kick-off' : 'Training';
-        const body = ev.title + ' · ' + action + ' ' + fmtDate(ev.date, ev.time) + (ev.location ? ' · ' + ev.location : '') + ' · Please update your availability.';
-        const sent = await sendPushNotification('fixture-reminder', title, body, {url:'/?portal=parent', eventId:ev.id});
-        btn.disabled = false;
-        if(sent) showToast('Reminder sent');
       });
     });
     document.querySelectorAll('[data-add-calendar]').forEach(btn => {
@@ -1699,8 +1727,25 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     });
   }
 
+  document.getElementById('notifications-off-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('notifications-off-btn');
+    const status = document.getElementById('options-notification-status');
+    if(!localStorage.getItem('boyneFCMToken')){ renderOptions(); return; }
+    if(!confirm('Turn off notifications on this device?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Turning Off…';
+    const ok = window.boyneDisableNotifications ? await window.boyneDisableNotifications() : false;
+    if(ok){
+      showToast('Notifications turned off');
+      renderOptions();
+    }else{
+      btn.disabled = false;
+      btn.textContent = '🔕 Turn Off Notifications';
+      status.textContent = 'Notifications could not be turned off. Please try again.';
+    }
+  });
   // Role toggle and coach navigation
-  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history'].includes(activeTab)) activeTab='fixtures'; render(); });
+  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','options'].includes(activeTab)) activeTab='fixtures'; render(); });
   document.getElementById('role-coach').addEventListener('click', () => { if(PARENT_ONLY) return; role = 'coach'; render(); });
   document.querySelectorAll('.app-tab').forEach(btn => btn.addEventListener('click', () => { activeTab=btn.getAttribute('data-tab'); openEventId=null; render(); }));
 
