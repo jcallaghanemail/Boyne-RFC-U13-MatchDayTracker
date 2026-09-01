@@ -112,6 +112,12 @@
   .poll-answer-names{font-size:11px;line-height:1.45;color:var(--ink-soft);overflow-wrap:anywhere;}
   .poll-no-response{margin-top:9px;padding:9px 10px;background:var(--no-bg);border:1px solid #E2B2AC;border-radius:8px;}
   .poll-export{width:100%;margin-top:10px;border:1px solid var(--pitch-mid);background:#fff;color:var(--pitch-mid);border-radius:8px;padding:9px;font-family:'Oswald';font-size:11px;font-weight:700;cursor:pointer;}
+  .poll-player-list{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 5px;}
+  .poll-player-btn{border:1px solid var(--line);background:#fff;color:var(--ink-soft);border-radius:16px;padding:7px 10px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;}
+  .poll-player-btn.selected{background:var(--pitch-deep);color:#fff;border-color:var(--pitch-deep);}
+  .poll-player-btn.answered:not(.selected){background:var(--going-bg);color:var(--going);border-color:#A9D4B7;}
+  .poll-reminder{width:100%;margin-top:9px;border:1px solid #7A5A18;background:#FFF7DA;color:#6A4B0C;border-radius:8px;padding:9px;font-family:'Oswald';font-size:11px;font-weight:700;cursor:pointer;}
+  .poll-reminder:disabled{opacity:.55;cursor:not-allowed;}
   .options-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;}
   .options-title{font-family:'Oswald';font-size:15px;font-weight:700;text-transform:uppercase;color:var(--pitch-deep);margin-bottom:7px;}
   .options-copy{font-size:12px;line-height:1.5;color:var(--ink-soft);margin-bottom:14px;}
@@ -979,14 +985,16 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const el=document.getElementById('polls-content');
     let html='<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Team Polls</div>';
     if(role==='coach') html+='<div class="poll-card poll-create"><div class="poll-title">Create a Poll</div><input id="poll-question" maxlength="160" placeholder="Poll question" value="'+escapeAttr(pollDraftQuestion)+'"><textarea id="poll-options" placeholder="Enter each option on a new line">'+escapeHtml(pollDraftOptions)+'</textarea><button class="primary-btn" id="create-poll" style="width:100%;margin-top:9px;">Create Poll</button></div>';
-    else html+='<div class="poll-card"><div class="poll-title">Select Your Child</div><select class="poll-child-select" id="poll-child"><option value="">— choose player —</option>'+roster.map(n=>'<option value="'+escapeAttr(n)+'" '+(n===selectedChild?'selected':'')+'>'+escapeHtml(n)+'</option>').join('')+'</select></div>';
+    else html+='<div class="poll-card"><div class="poll-title">How to Respond</div><div class="poll-meta">Select your child inside each poll, then choose an answer.</div></div>';
     if(!polls.length) html+='<div class="empty-state"><div class="big">No polls yet</div><div>'+(role==='coach'?'Create a poll above for parents to answer.':'There are no polls to answer.')+'</div></div>';
     polls.slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||'')).forEach(p=>{
       const votes=pollVotes[p.id]||{}, counts={}; p.options.forEach(o=>counts[o.id]=0); Object.values(votes).forEach(id=>{if(id in counts)counts[id]++;});
       const total=Object.values(counts).reduce((a,b)=>a+b,0), mine=selectedChild?votes[selectedChild]:'';
       html+='<div class="poll-card"><div class="poll-title">'+escapeHtml(p.question)+'</div><div class="poll-meta">'+(p.open?'Open':'Closed')+' · '+total+' response'+(total===1?'':'s')+'</div>';
       if(role==='parent'){
-        if(!selectedChild) html+='<div class="options-copy">Select your child above to respond.</div>';
+        html+='<div class="poll-answer-heading">Select your child</div><div class="poll-player-list">'+roster.map(name=>'<button class="poll-player-btn '+(name===selectedChild?'selected ':'')+(votes[name]?'answered':'')+'" data-poll-player="'+p.id+'" data-player="'+escapeAttr(name)+'">'+escapeHtml(name)+(votes[name]?' ✓':'')+'</button>').join('')+'</div>';
+        if(!roster.length) html+='<div class="options-copy">No players are available in the squad list.</div>';
+        else if(!selectedChild) html+='<div class="options-copy">Select a player above to answer this poll.</div>';
         p.options.forEach(o=>html+='<button class="poll-option '+(mine===o.id?'selected':'')+'" data-poll="'+p.id+'" data-option="'+o.id+'" '+(!p.open||!selectedChild?'disabled':'')+'>'+escapeHtml(o.text)+(mine===o.id?' ✓':'')+'</button>');
       }else{
         const answeredNames=Object.keys(votes).filter(name=>p.options.some(o=>o.id===votes[name])).sort((a,b)=>a.localeCompare(b));
@@ -996,7 +1004,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         p.options.forEach(o=>{const count=counts[o.id]||0,pct=total?Math.round(count*100/total):0;html+='<div class="poll-result"><div class="poll-result-head"><span>'+escapeHtml(o.text)+'</span><span>'+count+' ('+pct+'%)</span></div><div class="poll-bar"><div class="poll-fill" style="width:'+pct+'%"></div></div></div>';});
         html+='<div class="poll-response-summary"><div class="poll-summary-title">Response Summary</div><div class="poll-progress-row"><span>'+answeredNames.length+' answered · '+notAnswered.length+' not answered</span><span class="poll-progress-pill '+progressClass+'">'+responsePct+'% response</span></div>';
         p.options.forEach(o=>{const names=Object.keys(votes).filter(name=>votes[name]===o.id).sort((a,b)=>a.localeCompare(b));html+='<div class="poll-answer-group"><div class="poll-answer-heading">'+escapeHtml(o.text)+' ('+names.length+')</div><div class="poll-answer-names">'+(names.length?names.map(escapeHtml).join(', '):'No responses')+'</div></div>';});
-        html+='<div class="poll-no-response"><div class="poll-answer-heading">Not Answered ('+notAnswered.length+')</div><div class="poll-answer-names">'+(notAnswered.length?notAnswered.map(escapeHtml).join(', '):'Everyone has responded')+'</div></div><button class="poll-export" data-export-poll="'+p.id+'">Export Responses</button></div>';
+        html+='<div class="poll-no-response"><div class="poll-answer-heading">Not Answered ('+notAnswered.length+')</div><div class="poll-answer-names">'+(notAnswered.length?notAnswered.map(escapeHtml).join(', '):'Everyone has responded')+'</div></div><button class="poll-reminder" data-poll-reminder="'+p.id+'" '+(!p.open||!notAnswered.length?'disabled':'')+'>🔔 Send Poll Reminder'+(notAnswered.length?' ('+notAnswered.length+' awaiting)':'')+'</button><button class="poll-export" data-export-poll="'+p.id+'">Export Responses</button></div>';
         html+='<div class="poll-actions"><button class="poll-toggle" data-toggle-poll="'+p.id+'">'+(p.open?'Close Poll':'Reopen Poll')+'</button><button class="poll-delete" data-delete-poll="'+p.id+'">Delete</button></div>';
       }
       html+='</div>';
@@ -1004,9 +1012,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     el.innerHTML=html; attachPollHandlers();
   }
   function attachPollHandlers(){
-    const child=document.getElementById('poll-child'); if(child) child.onchange=async()=>{selectedChild=child.value;if(selectedChild)await rememberChildName(selectedChild);renderPolls();};
+    document.querySelectorAll('[data-poll-player]').forEach(b=>b.onclick=async()=>{selectedChild=b.getAttribute('data-player');if(selectedChild)await rememberChildName(selectedChild);renderPolls();});
     const pq=document.getElementById('poll-question'); const po=document.getElementById('poll-options'); if(pq){pq.oninput=()=>{pollDraftQuestion=pq.value;localStorage.setItem('poll-draft-question',pollDraftQuestion);};pq.onkeydown=e=>e.stopPropagation();} if(po){po.oninput=()=>{pollDraftOptions=po.value;localStorage.setItem('poll-draft-options',pollDraftOptions);};po.onkeydown=e=>e.stopPropagation();} const create=document.getElementById('create-poll'); if(create) create.onclick=async()=>{const q=document.getElementById('poll-question').value.trim(),opts=document.getElementById('poll-options').value.split(/\n/).map(x=>x.trim()).filter(Boolean);if(!q){showToast('Add a poll question');return;}if(opts.length<2){showToast('Add at least two options');return;}polls.push({id:uid(),question:q,options:opts.map(text=>({id:uid(),text})),open:true,createdAt:new Date().toISOString()});pollDraftQuestion='';pollDraftOptions='';localStorage.removeItem('poll-draft-question');localStorage.removeItem('poll-draft-options');await savePolls();showToast('Poll created');renderPolls();};
     document.querySelectorAll('[data-poll]').forEach(b=>b.onclick=async()=>{if(role!=='parent'||!selectedChild)return;const id=b.getAttribute('data-poll'),poll=polls.find(x=>x.id===id);if(!poll||!poll.open)return;if(!pollVotes[id])pollVotes[id]={};pollVotes[id][selectedChild]=b.getAttribute('data-option');await savePolls();showToast('Response saved for '+selectedChild);renderPolls();});
+    document.querySelectorAll('[data-poll-reminder]').forEach(b=>b.onclick=async()=>{if(role!=='coach'||b.disabled)return;const p=polls.find(x=>x.id===b.getAttribute('data-poll-reminder'));if(!p||!p.open)return;const votes=pollVotes[p.id]||{},notAnswered=roster.filter(name=>!votes[name]);if(!notAnswered.length){showToast('Everyone has responded');return;}if(!confirm('Send a reminder for \"'+p.question+'\" to all subscribed users?'))return;b.disabled=true;const sent=await sendPushNotification('poll-reminder','Boyne RFC U13 Poll Reminder','Please complete: '+p.question+' · '+notAnswered.length+' player'+(notAnswered.length===1?'':'s')+' awaiting a response.',{url:'/?portal=parent',pollId:p.id});b.disabled=false;if(sent)showToast('Poll reminder sent');});
     document.querySelectorAll('[data-export-poll]').forEach(b=>b.onclick=()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-export-poll'));if(p)exportPollResponses(p);});
     document.querySelectorAll('[data-toggle-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-toggle-poll'));if(!p)return;p.open=!p.open;await savePolls();showToast(p.open?'Poll reopened':'Poll closed');renderPolls();});
     document.querySelectorAll('[data-delete-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach'||!confirm('Delete this poll and all responses?'))return;const id=b.getAttribute('data-delete-poll');polls=polls.filter(x=>x.id!==id);delete pollVotes[id];await savePolls();showToast('Poll deleted');renderPolls();});
@@ -1375,7 +1384,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
             <div class="event-title">${escapeHtml(ev.title)}</div>
             <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}</div>
             ${safeMapUrl(ev.mapLink) ? `<a class="map-link" href="${escapeAttr(safeMapUrl(ev.mapLink))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">View in Google Maps</a>` : ''}
-            ${!isHistoryEvent(ev) ? `<div class="calendar-actions"><button class="calendar-btn" data-add-calendar="${ev.id}">📅 Add to Calendar</button></div>` : ''}
+            ${!isHistoryEvent(ev) ? `<div class="calendar-actions"><button class="calendar-btn" data-add-calendar="${ev.id}">📅 Add to Calendar</button>${role === 'coach' ? `<button class="calendar-btn" data-send-reminder="${ev.id}">🔔 Send Reminder</button>` : ''}</div>` : ''}
             ${ev.archived ? '<span class="archived-badge">Archived</span>' : ''}
             ${summaryHtml}
           </div>
@@ -1531,6 +1540,23 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         openEventId = null;
         showToast('Match moved to History');
         await render();
+      });
+    });
+    document.querySelectorAll('[data-send-reminder]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if(role !== 'coach') return;
+        const evId = btn.getAttribute('data-send-reminder');
+        const ev = events.find(item => item.id === evId);
+        if(!ev || isHistoryEvent(ev)) return;
+        if(!confirm('Send a reminder for "' + ev.title + '" to all subscribed users?')) return;
+        btn.disabled = true;
+        const title = ev.type === 'match' ? 'Fixture Reminder' : 'Training Reminder';
+        const action = ev.type === 'match' ? 'Kick-off' : 'Training';
+        const body = ev.title + ' · ' + action + ' ' + fmtDate(ev.date, ev.time) + (ev.location ? ' · ' + ev.location : '') + ' · Please update your availability.';
+        const sent = await sendPushNotification('fixture-reminder', title, body, {url:'/?portal=parent', eventId:ev.id});
+        btn.disabled = false;
+        if(sent) showToast('Reminder sent');
       });
     });
     document.querySelectorAll('[data-add-calendar]').forEach(btn => {
