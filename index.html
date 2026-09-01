@@ -84,7 +84,23 @@
   .app-tabs.coach-view .app-tab.coach-only{display:block;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
-  .selection-page,.history-page,.options-page{padding:16px;}
+  .selection-page,.history-page,.options-page,.polls-page{padding:16px;}
+  .poll-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
+  .poll-title{font-family:'Oswald';font-size:15px;font-weight:700;color:var(--pitch-deep);margin-bottom:5px;}
+  .poll-meta{font-size:11px;color:var(--ink-soft);margin-bottom:10px;}
+  .poll-create input,.poll-create textarea,.poll-child-select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;font-family:inherit;font-size:12px;margin-top:7px;}
+  .poll-create textarea{min-height:76px;resize:vertical;}
+  .poll-option{width:100%;text-align:left;padding:10px;margin-top:7px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-weight:700;cursor:pointer;}
+  .poll-option.selected{background:var(--going-bg);color:var(--going);border-color:var(--going);}
+  .poll-option:disabled{opacity:.65;cursor:not-allowed;}
+  .poll-result{margin-top:9px;font-size:11px;}
+  .poll-result-head{display:flex;justify-content:space-between;gap:8px;font-weight:700;}
+  .poll-bar{height:7px;background:#E7E4DC;border-radius:6px;overflow:hidden;margin-top:4px;}
+  .poll-fill{height:100%;background:var(--going);}
+  .poll-actions{display:flex;gap:7px;margin-top:12px;}
+  .poll-actions button{flex:1;padding:9px;border-radius:8px;font-family:'Oswald';font-weight:700;cursor:pointer;}
+  .poll-toggle{border:1px solid var(--pitch-mid);background:var(--pitch-mid);color:#fff;}
+  .poll-delete{border:1px solid var(--no);background:#fff;color:var(--no);}
   .options-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;}
   .options-title{font-family:'Oswald';font-size:15px;font-weight:700;text-transform:uppercase;color:var(--pitch-deep);margin-bottom:7px;}
   .options-copy{font-size:12px;line-height:1.5;color:var(--ink-soft);margin-bottom:14px;}
@@ -421,6 +437,7 @@
     <button class="app-tab coach-only" data-tab="squad">Squad</button>
     <button class="app-tab coach-only" data-tab="selection">Selection</button>
     <button class="app-tab" data-tab="history">History</button>
+    <button class="app-tab" data-tab="polls">Polls</button>
     <button class="app-tab" data-tab="options">Options</button>
   </div>
 
@@ -496,12 +513,18 @@
   </div>
   <div class="selection-page" id="selection-content" style="display:none;"></div>
   <div class="history-page" id="history-content" style="display:none;"></div>
+  <div class="polls-page" id="polls-content" style="display:none;"></div>
   <div class="options-page" id="options-content" style="display:none;">
     <div class="options-card">
       <div class="options-title">Notification Options</div>
       <div class="options-copy">Turn off push notifications on this device. You can enable them again at any time using the button at the top of the app.</div>
       <button class="notifications-off-btn" id="notifications-off-btn" type="button">🔕 Turn Off Notifications</button>
       <div class="options-status" id="options-notification-status"></div>
+    </div>
+    <div class="options-card" style="margin-top:12px;">
+      <div class="options-title">Team Calendar</div>
+      <div class="options-copy">Add all current upcoming matches and training sessions to your calendar in one file. Download again after schedule changes to refresh it.</div>
+      <button class="calendar-btn" id="options-team-calendar" type="button" style="width:100%;padding:10px;">📅 Add Team Schedule</button>
     </div>
   </div>
 
@@ -593,6 +616,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let teamCache = {};
   let checkinCache = {}; // eventId -> { playerName: {checkedIn, updatedAt} }
   let matchNotesCache = {}; // eventId -> coach match notes
+  let polls = [];
+  let pollVotes = {}; // pollId -> { playerName: optionId }
 
   const POINTS = { Try:5, Con:2, Pen:3, DG:3 };
   const LABELS = { Try:'Try', Con:'Conversion', Pen:'Penalty', DG:'Drop Goal' };
@@ -648,6 +673,18 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     }
   }
 
+  async function loadPolls(){
+    const p = await safeGet('polls', true);
+    const v = await safeGet('poll-votes', true);
+    polls = p ? JSON.parse(p) : [];
+    pollVotes = v ? JSON.parse(v) : {};
+    if(!Array.isArray(polls)) polls = [];
+    if(!pollVotes || typeof pollVotes !== 'object') pollVotes = {};
+  }
+  async function savePolls(){
+    await safeSet('polls', JSON.stringify(polls), true);
+    await safeSet('poll-votes', JSON.stringify(pollVotes), true);
+  }
   async function loadRoster(){
     const v = await safeGet('roster', true);
     roster = v ? JSON.parse(v) : [];
@@ -913,6 +950,34 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   function statusLabel(s){ return s === 'going' ? 'Available' : s === 'maybe' ? 'Unsure' : 'Not Available'; }
   function statusClass(s){ return s === 'going' ? 'g' : s === 'maybe' ? 'm' : 'n'; }
 
+  function renderPolls(){
+    const el=document.getElementById('polls-content');
+    let html='<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Team Polls</div>';
+    if(role==='coach') html+='<div class="poll-card poll-create"><div class="poll-title">Create a Poll</div><input id="poll-question" maxlength="160" placeholder="Poll question"><textarea id="poll-options" placeholder="Enter each option on a new line"></textarea><button class="primary-btn" id="create-poll" style="width:100%;margin-top:9px;">Create Poll</button></div>';
+    else html+='<div class="poll-card"><div class="poll-title">Select Your Child</div><select class="poll-child-select" id="poll-child"><option value="">— choose player —</option>'+roster.map(n=>'<option value="'+escapeAttr(n)+'" '+(n===selectedChild?'selected':'')+'>'+escapeHtml(n)+'</option>').join('')+'</select></div>';
+    if(!polls.length) html+='<div class="empty-state"><div class="big">No polls yet</div><div>'+(role==='coach'?'Create a poll above for parents to answer.':'There are no polls to answer.')+'</div></div>';
+    polls.slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||'')).forEach(p=>{
+      const votes=pollVotes[p.id]||{}, counts={}; p.options.forEach(o=>counts[o.id]=0); Object.values(votes).forEach(id=>{if(id in counts)counts[id]++;});
+      const total=Object.values(counts).reduce((a,b)=>a+b,0), mine=selectedChild?votes[selectedChild]:'';
+      html+='<div class="poll-card"><div class="poll-title">'+escapeHtml(p.question)+'</div><div class="poll-meta">'+(p.open?'Open':'Closed')+' · '+total+' response'+(total===1?'':'s')+'</div>';
+      if(role==='parent'){
+        if(!selectedChild) html+='<div class="options-copy">Select your child above to respond.</div>';
+        p.options.forEach(o=>html+='<button class="poll-option '+(mine===o.id?'selected':'')+'" data-poll="'+p.id+'" data-option="'+o.id+'" '+(!p.open||!selectedChild?'disabled':'')+'>'+escapeHtml(o.text)+(mine===o.id?' ✓':'')+'</button>');
+      }else{
+        p.options.forEach(o=>{const count=counts[o.id]||0,pct=total?Math.round(count*100/total):0;html+='<div class="poll-result"><div class="poll-result-head"><span>'+escapeHtml(o.text)+'</span><span>'+count+' ('+pct+'%)</span></div><div class="poll-bar"><div class="poll-fill" style="width:'+pct+'%"></div></div></div>';});
+        html+='<div class="poll-actions"><button class="poll-toggle" data-toggle-poll="'+p.id+'">'+(p.open?'Close Poll':'Reopen Poll')+'</button><button class="poll-delete" data-delete-poll="'+p.id+'">Delete</button></div>';
+      }
+      html+='</div>';
+    });
+    el.innerHTML=html; attachPollHandlers();
+  }
+  function attachPollHandlers(){
+    const child=document.getElementById('poll-child'); if(child) child.onchange=async()=>{selectedChild=child.value;if(selectedChild)await rememberChildName(selectedChild);renderPolls();};
+    const create=document.getElementById('create-poll'); if(create) create.onclick=async()=>{const q=document.getElementById('poll-question').value.trim(),opts=document.getElementById('poll-options').value.split(/\n/).map(x=>x.trim()).filter(Boolean);if(!q){showToast('Add a poll question');return;}if(opts.length<2){showToast('Add at least two options');return;}polls.push({id:uid(),question:q,options:opts.map(text=>({id:uid(),text})),open:true,createdAt:new Date().toISOString()});await savePolls();showToast('Poll created');renderPolls();};
+    document.querySelectorAll('[data-poll]').forEach(b=>b.onclick=async()=>{if(role!=='parent'||!selectedChild)return;const id=b.getAttribute('data-poll'),poll=polls.find(x=>x.id===id);if(!poll||!poll.open)return;if(!pollVotes[id])pollVotes[id]={};pollVotes[id][selectedChild]=b.getAttribute('data-option');await savePolls();showToast('Response saved for '+selectedChild);renderPolls();});
+    document.querySelectorAll('[data-toggle-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-toggle-poll'));if(!p)return;p.open=!p.open;await savePolls();showToast(p.open?'Poll reopened':'Poll closed');renderPolls();});
+    document.querySelectorAll('[data-delete-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach'||!confirm('Delete this poll and all responses?'))return;const id=b.getAttribute('data-delete-poll');polls=polls.filter(x=>x.id!==id);delete pollVotes[id];await savePolls();showToast('Poll deleted');renderPolls();});
+  }
   function renderOptions(){
     const button = document.getElementById('notifications-off-btn');
     const status = document.getElementById('options-notification-status');
@@ -920,14 +985,16 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     button.disabled = !enabled;
     button.textContent = enabled ? '🔕 Turn Off Notifications' : 'Notifications Are Off';
     status.textContent = enabled ? 'Push notifications are enabled on this device.' : 'Push notifications are currently off on this device.';
+    const calendarButton=document.getElementById('options-team-calendar');
+    if(calendarButton) calendarButton.onclick=()=>{const upcoming=events.filter(item=>!isHistoryEvent(item));downloadCalendar('boyne-rfc-u13-team-schedule.ics',upcoming,'Boyne RFC U13');};
   }
   async function render(){
     document.body.classList.toggle('parent-only', PARENT_ONLY);
-    if(PARENT_ONLY){ role = 'parent'; if(!['fixtures','history','options'].includes(activeTab)) activeTab = 'fixtures'; }
+    if(PARENT_ONLY){ role = 'parent'; if(!['fixtures','history','polls','options'].includes(activeTab)) activeTab = 'fixtures'; }
     renderChildStrip();
     document.getElementById('role-parent').classList.toggle('active', role === 'parent');
     document.getElementById('role-coach').classList.toggle('active', role === 'coach');
-    if(role !== 'coach' && !['fixtures','history','options'].includes(activeTab)) activeTab = 'fixtures';
+    if(role !== 'coach' && !['fixtures','history','polls','options'].includes(activeTab)) activeTab = 'fixtures';
     const tabs = document.getElementById('app-tabs');
     tabs.classList.add('show');
     tabs.classList.toggle('coach-view', role === 'coach');
@@ -936,6 +1003,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.getElementById('selection-content').style.display = role === 'coach' && activeTab === 'selection' ? 'block' : 'none';
     document.getElementById('history-content').style.display = activeTab === 'history' ? 'block' : 'none';
     document.getElementById('options-content').style.display = activeTab === 'options' ? 'block' : 'none';
+    document.getElementById('polls-content').style.display = activeTab === 'polls' ? 'block' : 'none';
     document.getElementById('add-event-card').style.display = role === 'coach' && activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     document.getElementById('coach-roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
@@ -945,10 +1013,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       await renderHistory();
       return;
     }
-    if(activeTab === 'options'){
-      renderOptions();
-      return;
-    }
+    if(activeTab === 'options'){renderOptions();return;}
+    if(activeTab === 'polls'){renderPolls();return;}
 
     const content = document.getElementById('content');
     if(!loaded){
@@ -967,8 +1033,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const upcoming = events.filter(e => !isHistoryEvent(e));
     let html = '';
     if(upcoming.length){
-      html += `<div class="calendar-subscribe"><div class="calendar-subscribe-title">Boyne RFC U13 Team Calendar</div><div class="calendar-subscribe-copy">Add all current upcoming matches and training sessions to your calendar in one file. Download again after schedule changes to refresh your saved calendar.</div><button class="calendar-btn" data-team-calendar>📅 Add Team Schedule</button></div>`;
-      html += `<div class="section-label"><span class="num">01</span> Next Up</div><div class="pitch-rule"></div><div class="list">`;
+      html += `<div class="section-label">Next Up</div><div class="pitch-rule"></div><div class="list">`;
       for(const ev of upcoming) html += await renderCard(ev);
       html += `</div>`;
     }else{
@@ -1745,7 +1810,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     }
   });
   // Role toggle and coach navigation
-  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','options'].includes(activeTab)) activeTab='fixtures'; render(); });
+  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','polls','options'].includes(activeTab)) activeTab='fixtures'; render(); });
   document.getElementById('role-coach').addEventListener('click', () => { if(PARENT_ONLY) return; role = 'coach'; render(); });
   document.querySelectorAll('.app-tab').forEach(btn => btn.addEventListener('click', () => { activeTab=btn.getAttribute('data-tab'); openEventId=null; render(); }));
 
@@ -1874,6 +1939,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadEvents();
     await loadRoster();
     await loadCoachRoster();
+    await loadPolls();
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     if(openEventId){
       const ev = events.find(e => e.id === openEventId);
@@ -1904,6 +1970,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadLastChildName();
     await loadLastCoachName();
     await loadEvents();
+    await loadPolls();
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     loaded = true;
     render();
