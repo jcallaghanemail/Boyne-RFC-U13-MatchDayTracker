@@ -789,10 +789,11 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   }
 
   function isCompletedMatch(ev){
-    const sc = scoreCache[ev.id];
-    return ev.type === 'match' && sc && sc.status === 'final';
+    return ev.type === 'match' && ev.movedToHistory === true;
   }
-  function isHistoryEvent(ev){ return isPast(ev) || isCompletedMatch(ev); }
+  function isHistoryEvent(ev){
+    return ev.type === 'match' ? isCompletedMatch(ev) : isPast(ev);
+  }
   function isPast(ev){
     try{
       const dt = new Date(ev.date + 'T' + (ev.time || '23:59'));
@@ -1029,7 +1030,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
             <div class="match-status-btns">
               <button class="status-btn ${sc.status === 'live' ? 'active-live' : ''}" data-ev="${ev.id}" data-status="live">Live</button>
               <button class="status-btn ${sc.status === 'final' ? 'active-final' : ''}" data-ev="${ev.id}" data-status="final">Final</button>
-            </div>`;
+            </div>
+            ${sc.status === 'final' && !ev.movedToHistory ? `<button class="primary-btn" style="width:100%;margin-bottom:14px;" data-move-history="${ev.id}">Move Match To History</button>` : ''}`;
         }
       }
 
@@ -1372,6 +1374,22 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.querySelectorAll('[data-publish-team]').forEach(b=>b.onclick=async()=>{ const id=b.getAttribute('data-publish-team'),team=teamCache[id]; if(!team.published && Object.keys(team.positions).length===0){showToast('Select at least one player first');return;} team.published=!team.published; team.publishedAt=team.published?new Date().toISOString():null; await saveTeam(id); if(team.published){const ev=events.find(e=>e.id===id);await sendPushNotification('team-announced','Team Announced',ev?ev.title+' team has been published':'The team has been published',{url:'/?portal=parent',eventId:id});} showToast(team.published?'Team published':'Team unpublished'); await renderSelection(); });
   }
   function attachCardHandlers(){
+    document.querySelectorAll('[data-move-history]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if(role !== 'coach') return;
+        const evId = btn.getAttribute('data-move-history');
+        const ev = events.find(item => item.id === evId);
+        const sc = scoreCache[evId];
+        if(!ev || ev.type !== 'match' || !sc || sc.status !== 'final') return;
+        ev.movedToHistory = true;
+        ev.movedToHistoryAt = new Date().toISOString();
+        await saveEvents();
+        openEventId = null;
+        showToast('Match moved to History');
+        await render();
+      });
+    });
     document.querySelectorAll('[data-add-calendar]').forEach(btn => {
       btn.onclick = (e) => {
         e.stopPropagation();
@@ -1765,7 +1783,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     const hasHistoricalResult = newType === 'match' && homeScoreText !== '' && awayScoreText !== '';
     if(!title || !date){ showToast('Add a title and date first'); return; }
     if(mapLinkInput && !mapLink){ showToast('Paste a valid HTTPS Google Maps link'); return; }
-    const ev = { id: uid(), type: newType, title, date, time, location, mapLink, opponent };
+    const ev = { id: uid(), type: newType, title, date, time, location, mapLink, opponent, movedToHistory: hasHistoricalResult };
     events.push(ev);
     await saveEvents();
     await loadEvents();
