@@ -207,6 +207,21 @@
   .delete-fixture-btn{width:100%;border:1px solid var(--no);background:#fff;color:var(--no);border-radius:8px;padding:10px;font-family:'Oswald';font-size:12px;font-weight:700;cursor:pointer;}
   .archive-training-btn{width:100%;border:1px solid var(--pitch-mid);background:var(--pitch-mid);color:#fff;border-radius:8px;padding:10px;font-family:'Oswald';font-size:12px;font-weight:700;cursor:pointer;margin-bottom:8px;}
   .archive-training-btn.restore{background:#fff;color:var(--pitch-mid);}
+  .archive-match-btn{width:100%;border:1px solid var(--pitch-mid);background:var(--pitch-mid);color:#fff;border-radius:8px;padding:10px;font-family:'Oswald';font-size:12px;font-weight:700;cursor:pointer;margin-bottom:8px;}
+  .archive-match-btn.restore{background:#fff;color:var(--pitch-mid);}
+  .match-report{margin:0 0 14px;padding:12px;background:#EEF5F0;border:1px solid #B8D0C0;border-radius:10px;}
+  .match-report-title{font-family:'Oswald';font-size:13px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--pitch-deep);margin-bottom:9px;}
+  .match-report-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px;}
+  .match-report-stat{padding:8px;background:#fff;border:1px solid var(--line);border-radius:8px;font-size:11px;color:var(--ink-soft);}
+  .match-report-stat strong{display:block;color:var(--ink);font-size:13px;margin-top:2px;}
+  .match-report-section{margin-top:11px;padding-top:9px;border-top:1px dashed var(--line);}
+  .match-report-label{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--pitch-deep);margin-bottom:5px;}
+  .match-report-list{font-size:11.5px;line-height:1.55;color:var(--ink-soft);}
+  .match-notes{width:100%;min-height:90px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:12px;resize:vertical;background:#fff;}
+  .match-report-actions{display:flex;gap:7px;margin-top:8px;}
+  .match-report-actions button{flex:1;margin-top:0;}
+  .edit-result-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px;}
+  .edit-result-row input{width:100%;padding:8px;border:1px solid var(--line);border-radius:7px;font-family:'JetBrains Mono';}
   .archived-badge{display:inline-block;margin-top:5px;padding:3px 7px;border-radius:9px;background:#E7E4DC;color:var(--ink-soft);font-size:10px;font-weight:700;text-transform:uppercase;}
 
   /* Scoreboard */
@@ -531,6 +546,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let selectedPitchSlot = null;
   let teamCache = {};
   let checkinCache = {}; // eventId -> { playerName: {checkedIn, updatedAt} }
+  let matchNotesCache = {}; // eventId -> coach match notes
 
   const POINTS = { Try:5, Con:2, Pen:3, DG:3 };
   const LABELS = { Try:'Try', Con:'Conversion', Pen:'Penalty', DG:'Drop Goal' };
@@ -687,6 +703,15 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   }
   async function saveScore(eventId){
     await safeSet('score-' + eventId, JSON.stringify(scoreCache[eventId]), true);
+  }
+  async function loadMatchNotes(eventId){
+    const v = await safeGet('match-notes-' + eventId, true);
+    matchNotesCache[eventId] = v || '';
+    return matchNotesCache[eventId];
+  }
+  async function saveMatchNotes(eventId, value){
+    matchNotesCache[eventId] = value;
+    await safeSet('match-notes-' + eventId, value, true);
   }
   function currentElapsed(sc){
     const base = Math.max(0, Number(sc.elapsedSeconds) || 0);
@@ -983,6 +1008,34 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         }
       }
 
+      if(role === 'coach' && ev.type === 'match' && isHistoryEvent(ev) && sc){
+        const notes = matchNotesCache[ev.id] !== undefined ? matchNotesCache[ev.id] : await loadMatchNotes(ev.id);
+        const attended = roster.filter(n => checkins[n] && checkins[n].checkedIn);
+        const expected = Object.entries(rs || {}).filter(([,v]) => v.status === 'going').map(([n]) => n);
+        const missing = expected.filter(n => !checkins[n] || !checkins[n].checkedIn);
+        const starters = POSITIONS.filter(([num]) => team && team.positions && team.positions[num]).map(([num,pos]) => `${num}. ${team.positions[num]} - ${pos}`);
+        const subs = team && Array.isArray(team.subs) ? team.subs.filter(Boolean) : [];
+        const coaches = Object.entries(crs || {}).filter(([,v]) => v.status === 'going').map(([n]) => n);
+        const result = sc.home > sc.away ? 'Win' : sc.home < sc.away ? 'Loss' : 'Draw';
+        const attendancePct = expected.length ? Math.round((attended.filter(n => expected.includes(n)).length / expected.length) * 100) + '%' : 'Not available';
+        const timeline = (sc.log || []).map(l => `${typeof l.matchSeconds === 'number' ? Math.floor(l.matchSeconds/60) + "' " : ''}${LABELS[l.type]} - ${l.scorer || (l.team === 'home' ? sc.homeName : sc.awayName)} (+${POINTS[l.type]})`);
+        body += `<div class="match-report">
+          <div class="match-report-title">Coach Match Report</div>
+          <div class="match-report-grid">
+            <div class="match-report-stat">Result<strong>${result}</strong></div>
+            <div class="match-report-stat">Final Score<strong>${sc.home} - ${sc.away}</strong></div>
+            <div class="match-report-stat">Player Attendance<strong>${attended.length} checked in</strong></div>
+            <div class="match-report-stat">Attendance Rate<strong>${attendancePct}</strong></div>
+          </div>
+          <div class="match-report-section"><div class="match-report-label">Starting XV</div><div class="match-report-list">${starters.length ? starters.map(escapeHtml).join('<br>') : 'No starting team recorded'}</div></div>
+          <div class="match-report-section"><div class="match-report-label">Substitutes</div><div class="match-report-list">${subs.length ? subs.map(escapeHtml).join(', ') : 'No substitutes recorded'}</div></div>
+          <div class="match-report-section"><div class="match-report-label">Coaching Team</div><div class="match-report-list">${team && team.leadCoach ? '<strong>Lead:</strong> ' + escapeHtml(team.leadCoach) + '<br>' : ''}${team && team.assistantCoaches && team.assistantCoaches.length ? '<strong>Assistants:</strong> ' + team.assistantCoaches.map(escapeHtml).join(', ') + '<br>' : ''}<strong>Confirmed:</strong> ${coaches.length ? coaches.map(escapeHtml).join(', ') : 'None recorded'}</div></div>
+          <div class="match-report-section"><div class="match-report-label">Attendance Detail</div><div class="match-report-list"><strong>Checked in:</strong> ${attended.length ? attended.map(escapeHtml).join(', ') : 'None recorded'}<br><strong>Expected but missing:</strong> ${missing.length ? missing.map(escapeHtml).join(', ') : 'None'}</div></div>
+          <div class="match-report-section"><div class="match-report-label">Match Timeline</div><div class="match-report-list">${timeline.length ? timeline.map(escapeHtml).join('<br>') : 'No scoring events recorded'}</div></div>
+          <div class="match-report-section"><div class="match-report-label">Edit Final Result</div><div class="edit-result-row"><input type="number" min="0" value="${sc.home}" data-edit-home="${ev.id}" aria-label="Boyne final score"><input type="number" min="0" value="${sc.away}" data-edit-away="${ev.id}" aria-label="Opponent final score"></div><div class="match-report-actions"><button class="primary-btn" data-save-result="${ev.id}">Save Result</button></div></div>
+          <div class="match-report-section"><div class="match-report-label">Coach Notes</div><textarea class="match-notes" data-match-notes="${ev.id}" placeholder="Add match notes, key moments or follow-up actions">${escapeHtml(notes)}</textarea><div class="match-report-actions"><button class="primary-btn" data-save-notes="${ev.id}">Save Notes</button></div></div>
+        </div>`;
+      }
       const rsvpData = rs || {};
       const entries = Object.entries(rsvpData);
       const goingCount = entries.filter(([,v]) => v.status === 'going').length;
@@ -1096,7 +1149,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       }
       body += `</div><div class="rsvp-count">${coachGoingCount} confirmed going</div></div>`;
       }
-      if(role === 'coach') body += `<div class="fixture-admin">${ev.type === 'training' && isHistoryEvent(ev) ? `<button class="archive-training-btn ${ev.archived ? 'restore' : ''}" data-archive-training="${ev.id}">${ev.archived ? 'Restore Training' : 'Archive Training'}</button>` : ''}<button class="delete-fixture-btn" data-delete-event="${ev.id}">Delete ${ev.type === 'match' ? 'Fixture' : 'Training'}</button></div>`;
+      if(role === 'coach') body += `<div class="fixture-admin">${ev.type === 'training' && isHistoryEvent(ev) ? `<button class="archive-training-btn ${ev.archived ? 'restore' : ''}" data-archive-training="${ev.id}">${ev.archived ? 'Restore Training' : 'Archive Training'}</button>` : ''}${ev.type === 'match' && isHistoryEvent(ev) ? `<button class="archive-match-btn ${ev.archived ? 'restore' : ''}" data-archive-match="${ev.id}">${ev.archived ? 'Restore Match' : 'Archive Match'}</button>` : ''}<button class="delete-fixture-btn" data-delete-event="${ev.id}">Permanently Delete ${ev.type === 'match' ? 'Match' : 'Training'}</button></div>`;
       body += `</div>`;
     }
 
@@ -1179,9 +1232,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   async function renderHistory(){
     const el = document.getElementById('history-content');
     const allHistory = events.filter(isHistoryEvent).slice().sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
-    const history = allHistory.filter(ev => !(ev.type === 'training' && ev.archived));
+    const history = allHistory.filter(ev => !ev.archived);
+    const archivedMatches = role === 'coach' ? allHistory.filter(ev => ev.type === 'match' && ev.archived) : [];
     const archivedTraining = role === 'coach' ? allHistory.filter(ev => ev.type === 'training' && ev.archived) : [];
-    if(!history.length && !archivedTraining.length){
+    if(!history.length && !archivedTraining.length && !archivedMatches.length){
       el.innerHTML = `<div class="empty-state"><div class="big">No history yet</div><div>Past fixtures and matches marked Final will appear here automatically.</div></div>`;
       return;
     }
@@ -1189,6 +1243,11 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     if(history.length){
       html += `<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Fixture & Result History</div><div class="list" style="padding:0;">`;
       for(const ev of history) html += await renderCard(ev);
+      html += `</div>`;
+    }
+    if(archivedMatches.length){
+      html += `<div class="section-label" style="margin:24px 0 12px;"><span class="num">•</span> Archived Matches</div><div class="list" style="padding:0;">`;
+      for(const ev of archivedMatches) html += await renderCard(ev);
       html += `</div>`;
     }
     if(archivedTraining.length){
@@ -1373,6 +1432,42 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         await render();
       });
     });
+    document.querySelectorAll('[data-save-result]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if(role !== 'coach') return;
+        const evId = btn.getAttribute('data-save-result');
+        const home = document.querySelector('[data-edit-home="' + evId + '"]');
+        const away = document.querySelector('[data-edit-away="' + evId + '"]');
+        const sc = scoreCache[evId];
+        if(!sc || !home || !away) return;
+        sc.home = Math.max(0, Number(home.value) || 0); sc.away = Math.max(0, Number(away.value) || 0);
+        sc.status = 'final'; sc.period = 'Full Time'; freezeClock(sc);
+        await saveScore(evId); showToast('Final result updated'); await render();
+      });
+    });
+    document.querySelectorAll('[data-save-notes]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if(role !== 'coach') return;
+        const evId = btn.getAttribute('data-save-notes');
+        const notes = document.querySelector('[data-match-notes="' + evId + '"]');
+        await saveMatchNotes(evId, notes ? notes.value.trim() : '');
+        showToast('Match notes saved');
+      });
+    });
+    document.querySelectorAll('[data-archive-match]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if(role !== 'coach') return;
+        const evId = btn.getAttribute('data-archive-match');
+        const ev = events.find(item => item.id === evId);
+        if(!ev || ev.type !== 'match' || !isHistoryEvent(ev)) return;
+        ev.archived = !ev.archived; ev.archivedAt = ev.archived ? new Date().toISOString() : null;
+        await saveEvents(); openEventId = null;
+        showToast(ev.archived ? 'Match archived' : 'Match restored'); await render();
+      });
+    });
     document.querySelectorAll('[data-archive-training]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -1404,9 +1499,10 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
           safeRemove('coach-rsvp-' + evId, true),
           safeRemove('score-' + evId, true),
           safeRemove('team-' + evId, true),
-          safeRemove('checkin-' + evId, true)
+          safeRemove('checkin-' + evId, true),
+          safeRemove('match-notes-' + evId, true)
         ]);
-        delete rsvpCache[evId]; delete coachRsvpCache[evId]; delete scoreCache[evId]; delete teamCache[evId]; delete checkinCache[evId];
+        delete rsvpCache[evId]; delete coachRsvpCache[evId]; delete scoreCache[evId]; delete teamCache[evId]; delete checkinCache[evId]; delete matchNotesCache[evId];
         if(openEventId === evId) openEventId = null;
         if(selectionEventId === evId) selectionEventId = null;
         showToast(ev.type === 'match' ? 'Fixture deleted' : 'Training deleted');
