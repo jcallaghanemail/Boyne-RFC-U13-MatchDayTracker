@@ -618,6 +618,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let matchNotesCache = {}; // eventId -> coach match notes
   let polls = [];
   let pollVotes = {}; // pollId -> { playerName: optionId }
+  let pollDraftQuestion='';
+  let pollDraftOptions='';
 
   const POINTS = { Try:5, Con:2, Pen:3, DG:3 };
   const LABELS = { Try:'Try', Con:'Conversion', Pen:'Penalty', DG:'Drop Goal' };
@@ -953,7 +955,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   function renderPolls(){
     const el=document.getElementById('polls-content');
     let html='<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Team Polls</div>';
-    if(role==='coach') html+='<div class="poll-card poll-create"><div class="poll-title">Create a Poll</div><input id="poll-question" maxlength="160" placeholder="Poll question"><textarea id="poll-options" placeholder="Enter each option on a new line"></textarea><button class="primary-btn" id="create-poll" style="width:100%;margin-top:9px;">Create Poll</button></div>';
+    if(role==='coach') html+='<div class="poll-card poll-create"><div class="poll-title">Create a Poll</div><input id="poll-question" maxlength="160" placeholder="Poll question" value="'+escapeAttr(pollDraftQuestion)+'"><textarea id="poll-options" placeholder="Enter each option on a new line">'+escapeHtml(pollDraftOptions)+'</textarea><button class="primary-btn" id="create-poll" style="width:100%;margin-top:9px;">Create Poll</button></div>';
     else html+='<div class="poll-card"><div class="poll-title">Select Your Child</div><select class="poll-child-select" id="poll-child"><option value="">— choose player —</option>'+roster.map(n=>'<option value="'+escapeAttr(n)+'" '+(n===selectedChild?'selected':'')+'>'+escapeHtml(n)+'</option>').join('')+'</select></div>';
     if(!polls.length) html+='<div class="empty-state"><div class="big">No polls yet</div><div>'+(role==='coach'?'Create a poll above for parents to answer.':'There are no polls to answer.')+'</div></div>';
     polls.slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||'')).forEach(p=>{
@@ -973,7 +975,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   }
   function attachPollHandlers(){
     const child=document.getElementById('poll-child'); if(child) child.onchange=async()=>{selectedChild=child.value;if(selectedChild)await rememberChildName(selectedChild);renderPolls();};
-    const create=document.getElementById('create-poll'); if(create) create.onclick=async()=>{const q=document.getElementById('poll-question').value.trim(),opts=document.getElementById('poll-options').value.split(/\n/).map(x=>x.trim()).filter(Boolean);if(!q){showToast('Add a poll question');return;}if(opts.length<2){showToast('Add at least two options');return;}polls.push({id:uid(),question:q,options:opts.map(text=>({id:uid(),text})),open:true,createdAt:new Date().toISOString()});await savePolls();showToast('Poll created');renderPolls();};
+    const pq=document.getElementById('poll-question'); const po=document.getElementById('poll-options'); if(pq)pq.oninput=()=>pollDraftQuestion=pq.value; if(po)po.oninput=()=>pollDraftOptions=po.value; const create=document.getElementById('create-poll'); if(create) create.onclick=async()=>{const q=document.getElementById('poll-question').value.trim(),opts=document.getElementById('poll-options').value.split(/\n/).map(x=>x.trim()).filter(Boolean);if(!q){showToast('Add a poll question');return;}if(opts.length<2){showToast('Add at least two options');return;}polls.push({id:uid(),question:q,options:opts.map(text=>({id:uid(),text})),open:true,createdAt:new Date().toISOString()});pollDraftQuestion='';pollDraftOptions='';await savePolls();showToast('Poll created');renderPolls();};
     document.querySelectorAll('[data-poll]').forEach(b=>b.onclick=async()=>{if(role!=='parent'||!selectedChild)return;const id=b.getAttribute('data-poll'),poll=polls.find(x=>x.id===id);if(!poll||!poll.open)return;if(!pollVotes[id])pollVotes[id]={};pollVotes[id][selectedChild]=b.getAttribute('data-option');await savePolls();showToast('Response saved for '+selectedChild);renderPolls();});
     document.querySelectorAll('[data-toggle-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-toggle-poll'));if(!p)return;p.open=!p.open;await savePolls();showToast(p.open?'Poll reopened':'Poll closed');renderPolls();});
     document.querySelectorAll('[data-delete-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach'||!confirm('Delete this poll and all responses?'))return;const id=b.getAttribute('data-delete-poll');polls=polls.filter(x=>x.id!==id);delete pollVotes[id];await savePolls();showToast('Poll deleted');renderPolls();});
