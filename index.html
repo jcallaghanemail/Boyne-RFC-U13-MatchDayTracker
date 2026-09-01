@@ -975,7 +975,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         }
       }
 
-      if(ev.type === 'match' && sc && (role === 'coach' || sc.status === 'live' || sc.status === 'final')){
+      if(ev.type === 'match' && sc && !isHistoryEvent(ev) && (role === 'coach' || sc.status === 'live' || sc.status === 'final')){
         body += `
           <div class="scoreboard">
             <div class="sb-team"><div class="sb-name">${escapeHtml(sc.homeName)}</div><div class="sb-score">${sc.home}</div></div>
