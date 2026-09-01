@@ -191,6 +191,11 @@
   .history-card-line strong{color:var(--ink);}
   .history-card-score{font-family:'JetBrains Mono';font-size:12px;font-weight:700;color:var(--pitch-deep);}
   .history-card-names{font-size:10.5px;line-height:1.4;color:var(--ink-soft);overflow-wrap:anywhere;}
+  .history-quick-actions{display:flex;gap:7px;padding:0 14px 12px;}
+  .history-quick-actions button{flex:1;border-radius:8px;padding:8px 7px;font-family:'Oswald';font-size:11px;font-weight:700;cursor:pointer;}
+  .history-open-btn{border:1px solid var(--pitch-mid);background:var(--pitch-mid);color:#fff;}
+  .history-delete-btn{border:1px solid var(--no);background:#fff;color:var(--no);}
+  .history-archive-btn{border:1px solid var(--ink-soft);background:#fff;color:var(--ink-soft);}
   .event-right{display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0;}
   .live-pill{
     font-family:'JetBrains Mono'; font-size:10px; font-weight:700; letter-spacing:1px;
@@ -1229,6 +1234,33 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     }
     return html + `</div>`;
   }
+  function renderHistoryCardLite(ev){
+    const sc = ev.type === 'match' ? scoreCache[ev.id] : null;
+    const isOpen = openEventId === ev.id;
+    const result = sc && sc.status === 'final' ? (sc.home > sc.away ? 'W' : sc.home < sc.away ? 'L' : 'D') : '';
+    const scoreLine = sc && sc.status === 'final'
+      ? `<div class="history-card-score">${escapeHtml(sc.homeName)} ${sc.home} - ${sc.away} ${escapeHtml(sc.awayName)}${result ? ' · ' + result : ''}</div>`
+      : `<div class="history-card-line">${ev.type === 'match' ? 'Match report available' : 'Attendance history available'}</div>`;
+    const coachActions = role === 'coach' ? `<div class="history-quick-actions">
+      <button class="history-open-btn" data-toggle="${ev.id}">${isOpen ? 'Close' : (ev.type === 'match' ? 'View Report' : 'View Attendance')}</button>
+      <button class="history-archive-btn" ${ev.type === 'match' ? `data-archive-match="${ev.id}"` : `data-archive-training="${ev.id}"`}>${ev.archived ? 'Restore' : 'Archive'}</button>
+      <button class="history-delete-btn" data-delete-event="${ev.id}">Delete</button>
+    </div>` : '';
+    return `<div class="event-card" data-id="${ev.id}">
+      <div class="event-head" data-toggle="${ev.id}">
+        <div class="event-type-badge ${ev.type}">${ev.type === 'match' ? 'Match' : 'Training'}</div>
+        <div class="event-main">
+          <div class="event-title">${escapeHtml(ev.title)}</div>
+          <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}</div>
+          ${ev.archived ? '<span class="archived-badge">Archived</span>' : ''}
+          <div class="history-card-summary">${scoreLine}</div>
+        </div>
+        <div class="event-right"><div class="chev">▸</div></div>
+      </div>
+      ${coachActions}
+    </div>`;
+  }
+
   async function renderHistory(){
     const el = document.getElementById('history-content');
     const allHistory = events.filter(isHistoryEvent).slice().sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
@@ -1242,17 +1274,17 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     let html = '';
     if(history.length){
       html += `<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Fixture & Result History</div><div class="list" style="padding:0;">`;
-      for(const ev of history) html += await renderCard(ev);
+      for(const ev of history) html += openEventId === ev.id ? await renderCard(ev) : renderHistoryCardLite(ev);
       html += `</div>`;
     }
     if(archivedMatches.length){
       html += `<div class="section-label" style="margin:24px 0 12px;"><span class="num">•</span> Archived Matches</div><div class="list" style="padding:0;">`;
-      for(const ev of archivedMatches) html += await renderCard(ev);
+      for(const ev of archivedMatches) html += openEventId === ev.id ? await renderCard(ev) : renderHistoryCardLite(ev);
       html += `</div>`;
     }
     if(archivedTraining.length){
       html += `<div class="section-label" style="margin:24px 0 12px;"><span class="num">•</span> Archived Training</div><div class="list" style="padding:0;">`;
-      for(const ev of archivedTraining) html += await renderCard(ev);
+      for(const ev of archivedTraining) html += openEventId === ev.id ? await renderCard(ev) : renderHistoryCardLite(ev);
       html += `</div>`;
     }
     el.innerHTML = html;
@@ -1313,14 +1345,15 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         if(openEventId === id){
           openEventId = null;
         }else{
-          openEventId = id;
           const ev = events.find(e => e.id === id);
-          if(ev && ev.type === 'match') await loadScore(id);
-          await loadRsvp(id);
-          await loadCoachRsvp(id);
-          await loadCheckin(id);
+          if(!ev) return;
+          openEventId = id;
+          showToast(ev.type === 'match' ? 'Loading match report…' : 'Loading attendance…');
+          const loads = [loadRsvp(id), loadCoachRsvp(id), loadCheckin(id)];
+          if(ev.type === 'match') loads.push(loadScore(id), loadTeam(id), loadMatchNotes(id));
+          await Promise.all(loads);
         }
-        render();
+        await render();
       });
     });
 
@@ -1491,7 +1524,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         if(!ev) return;
         if(!confirm(`Delete "${ev.title}"?
 
-This permanently removes the fixture or training, RSVPs, score, clock and team selection.`)) return;
+This permanently removes this history record and its RSVPs, attendance, score, clock, team selection and notes.`)) return;
         events = events.filter(item => item.id !== evId);
         await saveEvents();
         await Promise.all([
@@ -1505,7 +1538,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
         delete rsvpCache[evId]; delete coachRsvpCache[evId]; delete scoreCache[evId]; delete teamCache[evId]; delete checkinCache[evId]; delete matchNotesCache[evId];
         if(openEventId === evId) openEventId = null;
         if(selectionEventId === evId) selectionEventId = null;
-        showToast(ev.type === 'match' ? 'Fixture deleted' : 'Training deleted');
+        showToast(ev.type === 'match' ? 'Match history deleted' : 'Training history deleted');
         await render();
       });
     });
@@ -1697,7 +1730,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     await loadEvents();
     await loadRoster();
     await loadCoachRoster();
-    for(const ev of events.filter(e => e.type === 'match')) await loadScore(ev.id);
+    await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     if(openEventId){
       const ev = events.find(e => e.id === openEventId);
       if(ev){
@@ -1727,7 +1760,7 @@ This permanently removes the fixture or training, RSVPs, score, clock and team s
     await loadLastChildName();
     await loadLastCoachName();
     await loadEvents();
-    for(const ev of events.filter(e => e.type === 'match')) await loadScore(ev.id);
+    await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     loaded = true;
     render();
     setInterval(updateVisibleClocks, 1000);
