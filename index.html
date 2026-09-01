@@ -176,6 +176,12 @@
   .event-meta{font-size:12px; color:var(--ink-soft); margin-top:2px;}
   .map-link{display:inline-flex; align-items:center; gap:5px; margin-top:6px; padding:6px 9px; border-radius:7px; background:#E7F0FF; color:#174EA6; border:1px solid #B8CDF2; font-size:11.5px; font-weight:700; text-decoration:none;}
   .map-link:hover{background:#D8E7FF;}
+  .calendar-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;}
+  .calendar-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid #7A5A18;background:#FFF7DA;color:#6A4B0C;border-radius:7px;padding:6px 9px;font-family:'Oswald';font-size:11px;font-weight:700;cursor:pointer;}
+  .calendar-subscribe{margin:0 16px 12px;padding:12px;background:#FFF7DA;border:1px solid #D9C27A;border-radius:10px;}
+  .calendar-subscribe-title{font-family:'Oswald';font-size:12px;font-weight:700;text-transform:uppercase;color:#6A4B0C;margin-bottom:5px;}
+  .calendar-subscribe-copy{font-size:11px;line-height:1.4;color:var(--ink-soft);margin-bottom:8px;}
+  .calendar-subscribe .calendar-btn{width:100%;padding:9px;}
   .fixture-summary{display:grid;gap:5px;margin-top:8px;}
   .summary-row{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--ink-soft);}
   .summary-label{width:48px;font-weight:700;color:var(--ink);}
@@ -861,6 +867,37 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     }catch(e){ return ''; }
   }
 
+  function icsEscape(value){
+    return String(value || '').replace(/\\/g,'\\\\').replace(/\r?\n/g,'\\n').replace(/,/g,'\\,').replace(/;/g,'\\;');
+  }
+  function icsLocalDate(date,time){
+    const cleanDate = String(date || '').replace(/-/g,'');
+    const cleanTime = String(time || '09:00').replace(':','').padEnd(4,'0');
+    return cleanDate + 'T' + cleanTime + '00';
+  }
+  function addMinutesToLocal(date,time,minutes){
+    const d = new Date(String(date) + 'T' + (time || '09:00') + ':00');
+    d.setMinutes(d.getMinutes() + minutes);
+    const pad=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'T'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds());
+  }
+  function icsEvent(ev){
+    const duration = ev.type === 'match' ? 120 : 90;
+    const description = ['Added from Boyne RFC U13 Pitchside.', ev.opponent ? 'Opponent: '+ev.opponent : '', ev.mapLink || ''].filter(Boolean).join('\\n');
+    return [
+      'BEGIN:VEVENT','UID:'+icsEscape(ev.id)+'@boynerfcu13','DTSTAMP:'+new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,''),
+      'DTSTART:'+icsLocalDate(ev.date,ev.time),'DTEND:'+addMinutesToLocal(ev.date,ev.time,duration),
+      'SUMMARY:'+icsEscape(ev.title),'LOCATION:'+icsEscape(ev.location || ''),'DESCRIPTION:'+icsEscape(description),'END:VEVENT'
+    ].join('\r\n');
+  }
+  function downloadCalendar(filename, calendarEvents, calendarName){
+    if(!calendarEvents.length){ showToast('No upcoming events to add'); return; }
+    const body=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Boyne RFC U13//Pitchside//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:'+icsEscape(calendarName),...calendarEvents.map(icsEvent),'END:VCALENDAR'].join('\r\n');
+    const blob=new Blob([body],{type:'text/calendar;charset=utf-8'});
+    const url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
   function statusLabel(s){ return s === 'going' ? 'Available' : s === 'maybe' ? 'Unsure' : 'Not Available'; }
   function statusClass(s){ return s === 'going' ? 'g' : s === 'maybe' ? 'm' : 'n'; }
 
@@ -905,6 +942,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const upcoming = events.filter(e => !isHistoryEvent(e));
     let html = '';
     if(upcoming.length){
+      html += `<div class="calendar-subscribe"><div class="calendar-subscribe-title">Boyne RFC U13 Team Calendar</div><div class="calendar-subscribe-copy">Add all current upcoming matches and training sessions to your calendar in one file. Download again after schedule changes to refresh your saved calendar.</div><button class="calendar-btn" data-team-calendar>📅 Add Team Schedule</button></div>`;
       html += `<div class="section-label"><span class="num">01</span> Next Up</div><div class="pitch-rule"></div><div class="list">`;
       for(const ev of upcoming) html += await renderCard(ev);
       html += `</div>`;
@@ -1211,6 +1249,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
             <div class="event-title">${escapeHtml(ev.title)}</div>
             <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}</div>
             ${safeMapUrl(ev.mapLink) ? `<a class="map-link" href="${escapeAttr(safeMapUrl(ev.mapLink))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">View in Google Maps</a>` : ''}
+            ${!isHistoryEvent(ev) ? `<div class="calendar-actions"><button class="calendar-btn" data-add-calendar="${ev.id}">📅 Add to Calendar</button></div>` : ''}
             ${ev.archived ? '<span class="archived-badge">Archived</span>' : ''}
             ${summaryHtml}
           </div>
@@ -1352,6 +1391,20 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.querySelectorAll('[data-publish-team]').forEach(b=>b.onclick=async()=>{ const id=b.getAttribute('data-publish-team'),team=teamCache[id]; if(!team.published && Object.keys(team.positions).length===0){showToast('Select at least one player first');return;} team.published=!team.published; team.publishedAt=team.published?new Date().toISOString():null; await saveTeam(id); if(team.published){const ev=events.find(e=>e.id===id);await sendPushNotification('team-announced','Team Announced',ev?ev.title+' team has been published':'The team has been published',{url:'/?portal=parent',eventId:id});} showToast(team.published?'Team published':'Team unpublished'); await renderSelection(); });
   }
   function attachCardHandlers(){
+    document.querySelectorAll('[data-add-calendar]').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const ev = events.find(item => item.id === btn.getAttribute('data-add-calendar'));
+        if(ev) downloadCalendar('boyne-rfc-' + ev.date + '.ics',[ev],ev.title);
+      };
+    });
+    document.querySelectorAll('[data-team-calendar]').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const upcoming = events.filter(item => !isHistoryEvent(item));
+        downloadCalendar('boyne-rfc-u13-team-schedule.ics',upcoming,'Boyne RFC U13');
+      };
+    });
     document.querySelectorAll('[data-toggle]').forEach(el => {
       el.onclick = async (e) => {
         if(e) e.stopPropagation();
