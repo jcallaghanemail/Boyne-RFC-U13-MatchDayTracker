@@ -1232,7 +1232,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
             <div class="event-title">${escapeHtml(ev.title)}</div>
             <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}</div>
             ${safeMapUrl(ev.mapLink) ? `<a class="map-link" href="${escapeAttr(safeMapUrl(ev.mapLink))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">View in Google Maps</a>` : ''}
-            ${!isHistoryEvent(ev) ? `<div class="calendar-actions"><button class="calendar-btn" data-add-calendar="${ev.id}">📅 Add to Calendar</button></div>` : ''}
+            ${!isHistoryEvent(ev) ? `<div class="calendar-actions"><button class="calendar-btn" data-add-calendar="${ev.id}">📅 Add to Calendar</button>${role === 'coach' ? `<button class="calendar-btn" data-send-reminder="${ev.id}">🔔 Send Reminder</button>` : ''}</div>` : ''}
             ${ev.archived ? '<span class="archived-badge">Archived</span>' : ''}
             ${summaryHtml}
           </div>
@@ -1388,6 +1388,23 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         openEventId = null;
         showToast('Match moved to History');
         await render();
+      });
+    });
+    document.querySelectorAll('[data-send-reminder]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if(role !== 'coach') return;
+        const evId = btn.getAttribute('data-send-reminder');
+        const ev = events.find(item => item.id === evId);
+        if(!ev || isHistoryEvent(ev)) return;
+        if(!confirm('Send a reminder for "' + ev.title + '" to all subscribed users?')) return;
+        btn.disabled = true;
+        const title = ev.type === 'match' ? 'Fixture Reminder' : 'Training Reminder';
+        const action = ev.type === 'match' ? 'Kick-off' : 'Training';
+        const body = ev.title + ' · ' + action + ' ' + fmtDate(ev.date, ev.time) + (ev.location ? ' · ' + ev.location : '') + ' · Please update your availability.';
+        const sent = await sendPushNotification('fixture-reminder', title, body, {url:'/?portal=parent', eventId:ev.id});
+        btn.disabled = false;
+        if(sent) showToast('Reminder sent');
       });
     });
     document.querySelectorAll('[data-add-calendar]').forEach(btn => {
