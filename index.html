@@ -337,6 +337,9 @@
     font-family:inherit; font-size:12.5px; resize:vertical;
   }
   .rsvp-time{font-size:9.5px; color:var(--ink-soft); opacity:0.75; display:block; margin-top:1px; text-align:right;}
+  .fixture-person-select{margin-bottom:10px;padding:10px;background:#F0EDE3;border:1px solid var(--line);border-radius:9px;}
+  .fixture-person-select label{display:block;font-size:10px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
+  .fixture-person-select select{width:100%;padding:9px 10px;border-radius:7px;border:1px solid var(--line);font-family:inherit;font-size:13px;background:#fff;}
   .parent-name-wrap{margin-bottom:9px;}
   .parent-name-wrap label{display:block; font-size:10px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px;}
   .parent-name-input{width:100%; padding:9px 10px; border-radius:7px; border:1px solid var(--line); font-family:inherit; font-size:13px; background:#fff;}
@@ -799,33 +802,9 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
 
   function renderChildStrip(){
     const el = document.getElementById('child-strip');
-    if(role === 'parent'){
-      el.innerHTML = `
-        Tracking RSVPs for:
-        <select id="child-select" style="margin-left:6px;">
-          <option value="">— choose from roster —</option>
-          ${roster.map(c => `<option value="${escapeAttr(c)}" ${c===selectedChild ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
-        </select>
-      `;
-      document.getElementById('child-select').onchange = (e) => {
-        selectedChild = e.target.value;
-        render();
-      };
-    }else{
-      el.innerHTML = `
-        Attending as:
-        <select id="coach-select" style="margin-left:6px;">
-          <option value="">— choose your name —</option>
-          ${coachRoster.map(c => `<option value="${escapeAttr(c)}" ${c===selectedCoach ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
-        </select>
-      `;
-      document.getElementById('coach-select').onchange = (e) => {
-        selectedCoach = e.target.value;
-        render();
-      };
-    }
+    el.innerHTML = '';
+    el.style.display = 'none';
   }
-
   function renderRosterChips(){
     const chips = document.getElementById('roster-chips');
     chips.innerHTML = roster.length
@@ -1110,9 +1089,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       }
 
       if(role === 'parent'){
-        const child = effectiveChild();
+        const child = selectedChild;
+        body += `<div class="fixture-person-select"><label>Player for this fixture</label><select data-fixture-child="${ev.id}"><option value="">— choose player —</option>${roster.map(name => `<option value="${escapeAttr(name)}" ${name === child ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></div>`;
         if(!child){
-          body += `<div style="font-size:12.5px; color:var(--ink-soft);">Pick a name from the roster up top to RSVP.</div>`;
+          body += `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Choose a player above to RSVP for this fixture.</div>`;
         }else{
           const mine = rsvpData[child];
           const cur = mine ? mine.status : null;
@@ -1161,8 +1141,9 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         <div class="rsvp-title">Coaches</div>`;
 
       if(role === 'coach'){
+        body += `<div class="fixture-person-select"><label>Coach for this fixture</label><select data-fixture-coach="${ev.id}"><option value="">— choose coach —</option>${coachRoster.map(name => `<option value="${escapeAttr(name)}" ${name === selectedCoach ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></div>`;
         if(!selectedCoach){
-          body += `<div style="font-size:12.5px; color:var(--ink-soft);">Pick your name up top to RSVP.</div>`;
+          body += `<div style="font-size:12.5px; color:var(--ink-soft); margin-bottom:10px;">Choose a coach above to RSVP for this fixture.</div>`;
         }else{
           const mineC = coachData[selectedCoach];
           const curC = mineC ? mineC.status : null;
@@ -1623,6 +1604,22 @@ This permanently removes this history record and its RSVPs, attendance, score, c
       });
     });
 
+    document.querySelectorAll('[data-fixture-child]').forEach(select => {
+      select.onchange = async (e) => {
+        e.stopPropagation();
+        selectedChild = select.value;
+        if(selectedChild) await rememberChildName(selectedChild);
+        await render();
+      };
+    });
+    document.querySelectorAll('[data-fixture-coach]').forEach(select => {
+      select.onchange = async (e) => {
+        e.stopPropagation();
+        selectedCoach = select.value;
+        if(selectedCoach) await rememberCoachName(selectedCoach);
+        await render();
+      };
+    });
     document.querySelectorAll('.status-pick:not(.coach-status-pick) button').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
