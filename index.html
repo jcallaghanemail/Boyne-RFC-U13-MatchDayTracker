@@ -883,7 +883,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.getElementById('coach-roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     if(role === 'coach'){ renderRosterChips(); renderCoachRosterChips(); }
     if(role === 'coach' && activeTab === 'selection') await renderSelection();
-    if(activeTab === 'history') await renderHistory();
+    if(activeTab === 'history'){
+      await renderHistory();
+      return;
+    }
 
     const content = document.getElementById('content');
     if(!loaded){
@@ -1241,6 +1244,16 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const scoreLine = sc && sc.status === 'final'
       ? `<div class="history-card-score">${escapeHtml(sc.homeName)} ${sc.home} - ${sc.away} ${escapeHtml(sc.awayName)}${result ? ' · ' + result : ''}</div>`
       : `<div class="history-card-line">${ev.type === 'match' ? 'Match report available' : 'Attendance history available'}</div>`;
+    const tryTotals = {};
+    if(sc && Array.isArray(sc.log)){
+      sc.log.filter(item => item.team === 'home' && item.type === 'Try' && item.scorer).forEach(item => {
+        tryTotals[item.scorer] = (tryTotals[item.scorer] || 0) + 1;
+      });
+    }
+    const tryScorerNames = Object.keys(tryTotals);
+    const tryScorersLine = ev.type === 'match'
+      ? `<div class="history-card-line"><strong>Try scorers:</strong> ${tryScorerNames.length ? tryScorerNames.map(name => `${escapeHtml(name)}${tryTotals[name] > 1 ? ' (' + tryTotals[name] + ')' : ''}`).join(', ') : 'No named try scorers recorded'}</div>`
+      : '';
     const coachActions = role === 'coach' ? `<div class="history-quick-actions">
       <button class="history-open-btn" data-toggle="${ev.id}">${isOpen ? 'Close' : (ev.type === 'match' ? 'View Report' : 'View Attendance')}</button>
       <button class="history-archive-btn" ${ev.type === 'match' ? `data-archive-match="${ev.id}"` : `data-archive-training="${ev.id}"`}>${ev.archived ? 'Restore' : 'Archive'}</button>
@@ -1253,7 +1266,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
           <div class="event-title">${escapeHtml(ev.title)}</div>
           <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}</div>
           ${ev.archived ? '<span class="archived-badge">Archived</span>' : ''}
-          <div class="history-card-summary">${scoreLine}</div>
+          <div class="history-card-summary">${scoreLine}${tryScorersLine}</div>
         </div>
         <div class="event-right"><div class="chev">▸</div></div>
       </div>
@@ -1340,7 +1353,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   }
   function attachCardHandlers(){
     document.querySelectorAll('[data-toggle]').forEach(el => {
-      el.addEventListener('click', async () => {
+      el.onclick = async (e) => {
+        if(e) e.stopPropagation();
         const id = el.getAttribute('data-toggle');
         if(openEventId === id){
           openEventId = null;
@@ -1354,7 +1368,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
           await Promise.all(loads);
         }
         await render();
-      });
+      };
     });
 
     document.querySelectorAll('.pt-btn').forEach(btn => {
