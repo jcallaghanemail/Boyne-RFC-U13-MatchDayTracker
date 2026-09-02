@@ -46,7 +46,7 @@ async function requireCoach(request){
     return {
       ok:false,
       status:401,
-      error:'Invalid or expired coach login',
+      error:'Auth_File_Version2',
       diagnostic:code+' | '+message,
       token:summary
     };
