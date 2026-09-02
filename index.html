@@ -620,6 +620,7 @@
     <div class="options-card" id="coach-account-card" style="display:none;margin-top:12px;">
       <div class="options-title">Coach Account</div>
       <div class="options-copy" id="coach-account-status">Signed in.</div>
+      <div class="options-status" id="coach-session-status">Coach session locks after 30 minutes of inactivity.</div>
       <button class="notifications-off-btn" id="coach-logout-btn" type="button">Log Out of Coach Area</button>
     </div>
     <div class="options-card" style="margin-top:12px;">
@@ -1235,6 +1236,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const accountStatus=document.getElementById('coach-account-status');
     if(accountCard){accountCard.style.display=role==='coach'&&window.boyneCoachUser?'block':'none';}
     if(accountStatus&&window.boyneCoachUser) accountStatus.textContent='Signed in as ' + (window.boyneCoachUser.email||'coach') + '.';
+    const sessionStatus=document.getElementById('coach-session-status');
+    if(sessionStatus&&role==='coach') sessionStatus.textContent='Coach session locks after 30 minutes of inactivity. Activity resets the timer.';
     const calendarButton=document.getElementById('options-team-calendar');
     if(calendarButton) calendarButton.onclick=()=>{const upcoming=events.filter(item=>!isHistoryEvent(item));downloadCalendar('boyne-rfc-u13-team-schedule.ics',upcoming,'Boyne RFC U13');};
     const installCard=document.getElementById('install-app-card');
@@ -2117,12 +2120,52 @@ This permanently removes this history record and its RSVPs, attendance, score, c
   // Role toggle and secure coach navigation
   const loginModal=document.getElementById('coach-login-modal');
   const loginMessage=document.getElementById('coach-login-message');
-  function showCoachLogin(){loginMessage.textContent='';loginModal.classList.add('open');setTimeout(()=>document.getElementById('coach-email').focus(),0);}
+  const COACH_INACTIVITY_MS = 30 * 60 * 1000;
+  const COACH_ACTIVITY_KEY = 'boyneCoachLastActivity';
+  let coachInactivityTimer = null;
+  let coachTimeoutRunning = false;
+  function clearCoachInactivityTimer(){
+    if(coachInactivityTimer){ clearTimeout(coachInactivityTimer); coachInactivityTimer=null; }
+  }
+  function scheduleCoachInactivityCheck(){
+    clearCoachInactivityTimer();
+    if(role !== 'coach' || !window.boyneCoachUser) return;
+    const stored=Number(localStorage.getItem(COACH_ACTIVITY_KEY));
+    const lastActivity=Number.isFinite(stored)&&stored>0?stored:Date.now();
+    const remaining=Math.max(0,COACH_INACTIVITY_MS-(Date.now()-lastActivity));
+    coachInactivityTimer=setTimeout(handleCoachInactivityTimeout,remaining);
+  }
+  function recordCoachActivity(){
+    if(role !== 'coach' || !window.boyneCoachUser || coachTimeoutRunning) return;
+    localStorage.setItem(COACH_ACTIVITY_KEY,String(Date.now()));
+    scheduleCoachInactivityCheck();
+  }
+  async function handleCoachInactivityTimeout(){
+    if(coachTimeoutRunning || role !== 'coach') return;
+    const lastActivity=Number(localStorage.getItem(COACH_ACTIVITY_KEY))||0;
+    if(lastActivity && Date.now()-lastActivity < COACH_INACTIVITY_MS){ scheduleCoachInactivityCheck(); return; }
+    coachTimeoutRunning=true;
+    clearCoachInactivityTimer();
+    localStorage.removeItem(COACH_ACTIVITY_KEY);
+    try{ if(window.boyneSignOut) await window.boyneSignOut(); }catch(error){ console.error('Coach timeout sign-out failed',error); }
+    role='parent';activeTab='fixtures';openEventId=null;selectionEventId=null;
+    await render();
+    showCoachLogin('Coach session ended after 30 minutes of inactivity. Sign in again to continue.');
+    coachTimeoutRunning=false;
+  }
+  ['pointerdown','keydown','touchstart','scroll'].forEach(eventName=>window.addEventListener(eventName,recordCoachActivity,{passive:true}));
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible' || role!=='coach') return;
+    const lastActivity=Number(localStorage.getItem(COACH_ACTIVITY_KEY))||0;
+    if(lastActivity && Date.now()-lastActivity>=COACH_INACTIVITY_MS) handleCoachInactivityTimeout();
+    else recordCoachActivity();
+  });
+  function showCoachLogin(message=''){loginMessage.textContent=message;loginModal.classList.add('open');setTimeout(()=>document.getElementById('coach-email').focus(),0);}
   function hideCoachLogin(){loginModal.classList.remove('open');document.getElementById('coach-password').value='';loginMessage.textContent='';}
   async function enterCoachArea(){
     const user=window.boyneAuthReady?await window.boyneAuthReady:null;
     if(!user){showCoachLogin();return;}
-    role='coach';activeTab='dashboard';openEventId=null;await render();
+    role='coach';activeTab='dashboard';openEventId=null;recordCoachActivity();await render();
   }
   document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','polls','options'].includes(activeTab)) activeTab='fixtures'; render(); });
   document.getElementById('role-coach').addEventListener('click', () => { if(!PARENT_ONLY) enterCoachArea(); });
@@ -2133,7 +2176,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     const password=document.getElementById('coach-password').value;
     if(!email||!password){loginMessage.textContent='Enter your email address and password.';return;}
     const btn=document.getElementById('coach-login-btn');btn.disabled=true;btn.textContent='Signing In...';loginMessage.textContent='';
-    try{await window.boyneSignIn(email,password);hideCoachLogin();role='coach';activeTab='dashboard';showToast('Coach login successful');await render();}
+    try{await window.boyneSignIn(email,password);hideCoachLogin();role='coach';activeTab='dashboard';recordCoachActivity();showToast('Coach login successful');await render();}
     catch(error){console.error(error);loginMessage.textContent='Login failed. Check the email address and password.';}
     finally{btn.disabled=false;btn.textContent='Login';}
   });
@@ -2144,8 +2187,8 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     try{await window.boyneResetPassword(email);loginMessage.style.color='var(--going)';loginMessage.textContent='Password reset email sent.';setTimeout(()=>loginMessage.style.color='',2500);}
     catch(error){console.error(error);loginMessage.textContent='Could not send the password reset email.';}
   });
-  document.getElementById('coach-logout-btn').addEventListener('click',async()=>{await window.boyneSignOut();role='parent';activeTab='fixtures';showToast('Coach logged out');await render();});
-  window.addEventListener('boyne-auth-changed',async e=>{if(!e.detail.user&&role==='coach'){role='parent';activeTab='fixtures';await render();}});
+  document.getElementById('coach-logout-btn').addEventListener('click',async()=>{clearCoachInactivityTimer();localStorage.removeItem(COACH_ACTIVITY_KEY);await window.boyneSignOut();role='parent';activeTab='fixtures';showToast('Coach logged out');await render();});
+  window.addEventListener('boyne-auth-changed',async e=>{if(!e.detail.user){clearCoachInactivityTimer();localStorage.removeItem(COACH_ACTIVITY_KEY);if(role==='coach'){role='parent';activeTab='fixtures';await render();}}});
   document.querySelectorAll('.app-tab').forEach(btn => btn.addEventListener('click', () => { activeTab=btn.getAttribute('data-tab'); openEventId=null; render(); }));
 
   // Roster management (coach)
@@ -2357,7 +2400,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await render();
     if(PORTAL_MODE === 'coach' && !PARENT_ONLY){
       const user=window.boyneAuthReady?await window.boyneAuthReady:null;
-      if(user){role='coach';activeTab='dashboard';await render();}else showCoachLogin();
+      if(user){role='coach';activeTab='dashboard';recordCoachActivity();await render();}else showCoachLogin();
     }
     setInterval(updateVisibleClocks, 1000);
     setInterval(refreshLive, 10000);
