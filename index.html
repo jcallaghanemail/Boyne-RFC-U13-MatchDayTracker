@@ -450,9 +450,37 @@
 
   .loading-row{padding:24px; text-align:center; color:var(--ink-soft); font-size:13px;}
   .notification-row{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.notification-btn{border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:8px 11px;font-family:'Oswald';font-size:12px;font-weight:600;cursor:pointer}.notification-btn.enabled{background:var(--going)}.notification-status{font-size:10.5px;color:#fff;opacity:.85}
+  .coach-login-overlay{display:none;position:fixed;inset:0;background:rgba(8,20,15,.82);z-index:9999;padding:20px;align-items:flex-start;justify-content:center;overflow:auto;}
+  .coach-login-overlay.open{display:flex;}
+  .coach-login-card{width:100%;max-width:390px;margin-top:54px;background:var(--card);border-radius:14px;padding:22px;border:1px solid rgba(255,255,255,.25);box-shadow:0 18px 55px rgba(0,0,0,.35);}
+  .coach-login-title{font-family:'Oswald';font-size:22px;font-weight:700;color:var(--pitch-deep);margin-bottom:5px;}
+  .coach-login-copy{font-size:12px;line-height:1.5;color:var(--ink-soft);margin-bottom:15px;}
+  .coach-login-card label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);margin:10px 0 4px;}
+  .coach-login-card input{width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#fff;font-family:inherit;font-size:14px;}
+  .coach-login-actions{display:flex;gap:8px;margin-top:14px;}
+  .coach-login-actions button{flex:1;margin:0;}
+  .coach-login-cancel{border:1px solid var(--line);background:#fff;color:var(--ink-soft);border-radius:8px;padding:10px;font-family:'Oswald';font-weight:700;cursor:pointer;}
+  .coach-login-link{width:100%;border:0;background:transparent;color:var(--mud-dark);padding:10px 0 0;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;}
+  .coach-login-message{min-height:18px;margin-top:10px;font-size:11.5px;color:var(--no);text-align:center;}
 </style>
 </head>
 <body>
+<div class="coach-login-overlay" id="coach-login-modal" role="dialog" aria-modal="true" aria-labelledby="coach-login-title">
+  <div class="coach-login-card">
+    <div class="coach-login-title" id="coach-login-title">Coach Login</div>
+    <div class="coach-login-copy">Sign in with the coach account created in Firebase Authentication. Parent access remains unchanged.</div>
+    <label for="coach-email">Email address</label>
+    <input id="coach-email" type="email" autocomplete="username" inputmode="email" placeholder="coach@example.com">
+    <label for="coach-password">Password</label>
+    <input id="coach-password" type="password" autocomplete="current-password" placeholder="Password">
+    <div class="coach-login-actions">
+      <button class="coach-login-cancel" id="coach-login-cancel" type="button">Cancel</button>
+      <button class="primary-btn" id="coach-login-btn" type="button">Login</button>
+    </div>
+    <button class="coach-login-link" id="coach-reset-password" type="button">Forgot password?</button>
+    <div class="coach-login-message" id="coach-login-message" aria-live="polite"></div>
+  </div>
+</div>
 <div class="app" id="app">
 
   <div class="header">
@@ -580,6 +608,11 @@
       <button class="notifications-off-btn" id="notifications-off-btn" type="button">🔕 Turn Off Notifications</button>
       <div class="options-status" id="options-notification-status"></div>
     </div>
+    <div class="options-card" id="coach-account-card" style="display:none;margin-top:12px;">
+      <div class="options-title">Coach Account</div>
+      <div class="options-copy" id="coach-account-status">Signed in.</div>
+      <button class="notifications-off-btn" id="coach-logout-btn" type="button">Log Out of Coach Area</button>
+    </div>
     <div class="options-card" style="margin-top:12px;">
       <div class="options-title">Team Calendar</div>
       <div class="options-copy">Add all current upcoming matches and training sessions to your calendar in one file. Download again after schedule changes to refresh it.</div>
@@ -594,14 +627,27 @@
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {getMessaging,getToken,deleteToken,isSupported,onMessage} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+import {getAuth,setPersistence,browserLocalPersistence,signInWithEmailAndPassword,signOut,sendPasswordResetEmail,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 const firebaseConfig={apiKey:"AIzaSyBlT2UKLGBum9xTFmNusQHv9IRastAQqaA",authDomain:"boyne-rugby-tracker.firebaseapp.com",projectId:"boyne-rugby-tracker",storageBucket:"boyne-rugby-tracker.firebasestorage.app",messagingSenderId:"64724348826",appId:"1:64724348826:web:c71a4eee5b0121e412d423"};
 const vapidKey="BLbZancYiPj__47LlZoDppMxnpa-R3LcUKmGKTZH2ESCNbvC44oszPhUDwHCCW2lC_8k5WizW16VLe6Sw3jXSZI";
+const firebaseApp=initializeApp(firebaseConfig);
+const auth=getAuth(firebaseApp);
+await setPersistence(auth,browserLocalPersistence);
+window.boyneAuthReady=new Promise(resolve=>onAuthStateChanged(auth,user=>{
+  window.boyneCoachUser=user||null;
+  window.dispatchEvent(new CustomEvent('boyne-auth-changed',{detail:{user:user?{email:user.email,uid:user.uid}:null}}));
+  resolve(user||null);
+}));
+window.boyneSignIn=async(email,password)=>signInWithEmailAndPassword(auth,email,password);
+window.boyneSignOut=async()=>signOut(auth);
+window.boyneResetPassword=async email=>sendPasswordResetEmail(auth,email);
+window.boyneGetAuthToken=async()=>auth.currentUser?auth.currentUser.getIdToken():null;
 const button=document.getElementById('enable-push-btn'),status=document.getElementById('notification-status');
 function state(text,on=false){status.textContent=text;button.classList.toggle('enabled',on);button.textContent=on?'✓ Notifications Enabled':'🔔 Enable Notifications';button.disabled=on;}
 async function setup(){
  if(!('Notification' in window)||!('serviceWorker' in navigator)||!(await isSupported())){state('Push is not supported');button.disabled=true;return;}
  if(Object.values(firebaseConfig).some(v=>v.startsWith('YOUR_'))||vapidKey==='YOUR_VAPID_KEY'){state('Firebase settings required');return;}
- const messaging=getMessaging(initializeApp(firebaseConfig));
+ const messaging=getMessaging(firebaseApp);
  const sw=await navigator.serviceWorker.register('/firebase-messaging-sw.js');
  window.boyneDisableNotifications=async()=>{
    try{
@@ -620,7 +666,7 @@ async function setup(){
      return false;
    }
  };
- button.onclick=async()=>{try{button.disabled=true;status.textContent='Enabling notifications…';if(await Notification.requestPermission()!=='granted')throw new Error('Permission not granted');const token=await getToken(messaging,{vapidKey,serviceWorkerRegistration:sw});if(!token)throw new Error('No token returned');const portalRole=new URLSearchParams(location.search).get('portal')||'coach';localStorage.setItem('boyneFCMToken',token);localStorage.setItem('boyneFCMRole',portalRole);const r=await fetch('/api/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,role:portalRole})});if(!r.ok)throw new Error(await r.text());console.log('Boyne FCM token:',token);state('Notifications are enabled',true);}catch(e){console.error(e);state('Could not enable notifications');button.disabled=false;}};
+ button.onclick=async()=>{try{button.disabled=true;status.textContent='Enabling notifications…';if(await Notification.requestPermission()!=='granted')throw new Error('Permission not granted');const token=await getToken(messaging,{vapidKey,serviceWorkerRegistration:sw});if(!token)throw new Error('No token returned');const requestedRole=new URLSearchParams(location.search).get('portal');const portalRole=requestedRole==='coach'&&auth.currentUser?'coach':'parent';localStorage.setItem('boyneFCMToken',token);localStorage.setItem('boyneFCMRole',portalRole);const r=await fetch('/api/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,role:portalRole})});if(!r.ok)throw new Error(await r.text());console.log('Boyne FCM token:',token);state('Notifications are enabled',true);}catch(e){console.error(e);state('Could not enable notifications');button.disabled=false;}};
  onMessage(messaging,p=>window.dispatchEvent(new CustomEvent('boyne-notification',{detail:{title:p.notification?.title||'Boyne RFC U13',body:p.notification?.body||'New team update'}})));
  if(Notification.permission==='granted'&&localStorage.getItem('boyneFCMToken'))state('Notifications are enabled',true);
 }
@@ -639,17 +685,23 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       return await response.json();
     },
     async set(key, value){
+      const token = window.boyneGetAuthToken ? await window.boyneGetAuthToken() : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if(token) headers.Authorization = 'Bearer ' + token;
       const response = await fetch('/api/store', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ key, value })
       });
       if(!response.ok) throw new Error('Unable to save shared data');
       return true;
     },
     async remove(key){
+      const token = window.boyneGetAuthToken ? await window.boyneGetAuthToken() : null;
+      const headers = token ? { Authorization: 'Bearer ' + token } : {};
       const response = await fetch('/api/store?key=' + encodeURIComponent(key), {
         method: 'DELETE',
+        headers,
         cache: 'no-store'
       });
       if(!response.ok) throw new Error('Unable to delete shared data');
@@ -658,7 +710,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   };
   const PORTAL_MODE = new URLSearchParams(window.location.search).get('portal');
   const PARENT_ONLY = PORTAL_MODE === 'parent';
-  let role = PORTAL_MODE === 'coach' ? 'coach' : 'parent';
+  let role = 'parent';
   let events = [];
   let rsvpCache = {}; // eventId -> data
   let scoreCache = {}; // eventId -> data
@@ -670,7 +722,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let selectedCoach = '';   // chosen from the coaching staff dropdown
   let parentName = localStorage.getItem('parent-display-name') || '';
   let loaded = false;
-  let activeTab = PORTAL_MODE === 'coach' ? 'dashboard' : 'fixtures';
+  let activeTab = 'fixtures';
   let selectionEventId = null;
   let selectedStatsPlayer = '';
   let selectedPitchSlot = null;
@@ -695,7 +747,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     showToast._h = setTimeout(()=> t.classList.remove('show'), 2200);
   }
 
-  async function sendPushNotification(kind,title,body,data){try{const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,title,body,data:data||{},audience:'all'})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
+  async function sendPushNotification(kind,title,body,data){try{const token=window.boyneGetAuthToken?await window.boyneGetAuthToken():null;if(!token)throw new Error('Coach login required');const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({kind,title,body,data:data||{},audience:'all'})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
   async function safeGet(key, shared){
     try{
       if(!shared) return localStorage.getItem(key);
@@ -1150,6 +1202,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     button.disabled = !enabled;
     button.textContent = enabled ? '🔕 Turn Off Notifications' : 'Notifications Are Off';
     status.textContent = enabled ? 'Push notifications are enabled on this device.' : 'Push notifications are currently off on this device.';
+    const accountCard=document.getElementById('coach-account-card');
+    const accountStatus=document.getElementById('coach-account-status');
+    if(accountCard){accountCard.style.display=role==='coach'&&window.boyneCoachUser?'block':'none';}
+    if(accountStatus&&window.boyneCoachUser) accountStatus.textContent='Signed in as ' + (window.boyneCoachUser.email||'coach') + '.';
     const calendarButton=document.getElementById('options-team-calendar');
     if(calendarButton) calendarButton.onclick=()=>{const upcoming=events.filter(item=>!isHistoryEvent(item));downloadCalendar('boyne-rfc-u13-team-schedule.ics',upcoming,'Boyne RFC U13');};
   }
@@ -1996,9 +2052,38 @@ This permanently removes this history record and its RSVPs, attendance, score, c
       status.textContent = 'Notifications could not be turned off. Please try again.';
     }
   });
-  // Role toggle and coach navigation
+  // Role toggle and secure coach navigation
+  const loginModal=document.getElementById('coach-login-modal');
+  const loginMessage=document.getElementById('coach-login-message');
+  function showCoachLogin(){loginMessage.textContent='';loginModal.classList.add('open');setTimeout(()=>document.getElementById('coach-email').focus(),0);}
+  function hideCoachLogin(){loginModal.classList.remove('open');document.getElementById('coach-password').value='';loginMessage.textContent='';}
+  async function enterCoachArea(){
+    const user=window.boyneAuthReady?await window.boyneAuthReady:null;
+    if(!user){showCoachLogin();return;}
+    role='coach';activeTab='dashboard';openEventId=null;await render();
+  }
   document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','polls','options'].includes(activeTab)) activeTab='fixtures'; render(); });
-  document.getElementById('role-coach').addEventListener('click', () => { if(PARENT_ONLY) return; role = 'coach'; activeTab='dashboard'; render(); });
+  document.getElementById('role-coach').addEventListener('click', () => { if(!PARENT_ONLY) enterCoachArea(); });
+  document.getElementById('coach-login-cancel').addEventListener('click',hideCoachLogin);
+  loginModal.addEventListener('click',e=>{if(e.target===loginModal)hideCoachLogin();});
+  document.getElementById('coach-login-btn').addEventListener('click',async()=>{
+    const email=document.getElementById('coach-email').value.trim();
+    const password=document.getElementById('coach-password').value;
+    if(!email||!password){loginMessage.textContent='Enter your email address and password.';return;}
+    const btn=document.getElementById('coach-login-btn');btn.disabled=true;btn.textContent='Signing In...';loginMessage.textContent='';
+    try{await window.boyneSignIn(email,password);hideCoachLogin();role='coach';activeTab='dashboard';showToast('Coach login successful');await render();}
+    catch(error){console.error(error);loginMessage.textContent='Login failed. Check the email address and password.';}
+    finally{btn.disabled=false;btn.textContent='Login';}
+  });
+  document.getElementById('coach-password').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('coach-login-btn').click();});
+  document.getElementById('coach-reset-password').addEventListener('click',async()=>{
+    const email=document.getElementById('coach-email').value.trim();
+    if(!email){loginMessage.textContent='Enter your coach email address first.';return;}
+    try{await window.boyneResetPassword(email);loginMessage.style.color='var(--going)';loginMessage.textContent='Password reset email sent.';setTimeout(()=>loginMessage.style.color='',2500);}
+    catch(error){console.error(error);loginMessage.textContent='Could not send the password reset email.';}
+  });
+  document.getElementById('coach-logout-btn').addEventListener('click',async()=>{await window.boyneSignOut();role='parent';activeTab='fixtures';showToast('Coach logged out');await render();});
+  window.addEventListener('boyne-auth-changed',async e=>{if(!e.detail.user&&role==='coach'){role='parent';activeTab='fixtures';await render();}});
   document.querySelectorAll('.app-tab').forEach(btn => btn.addEventListener('click', () => { activeTab=btn.getAttribute('data-tab'); openEventId=null; render(); }));
 
   // Roster management (coach)
@@ -2207,7 +2292,11 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadPolls();
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     loaded = true;
-    render();
+    await render();
+    if(PORTAL_MODE === 'coach' && !PARENT_ONLY){
+      const user=window.boyneAuthReady?await window.boyneAuthReady:null;
+      if(user){role='coach';activeTab='dashboard';await render();}else showCoachLogin();
+    }
     setInterval(updateVisibleClocks, 1000);
     setInterval(refreshLive, 10000);
   })();
