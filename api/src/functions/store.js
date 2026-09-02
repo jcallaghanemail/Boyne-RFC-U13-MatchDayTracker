@@ -60,7 +60,7 @@ app.http('store', {
         const parentWritable = key === 'poll-votes' || key === 'news-reads' || (typeof key === 'string' && key.startsWith('rsvp-'));
         if (!parentWritable) {
           const auth = await requireCoach(request);
-          if (!auth.ok) return response(auth.status, { error: auth.error });
+          if (!auth.ok) return response(auth.status, auth);
         }
         const value = payload && payload.value;
         if (!validKey(key) || typeof value !== 'string') {
