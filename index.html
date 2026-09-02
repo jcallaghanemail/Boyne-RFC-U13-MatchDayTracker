@@ -627,6 +627,12 @@
       <div class="options-copy">Add all current upcoming matches and training sessions to your calendar in one file. Download again after schedule changes to refresh it.</div>
       <button class="calendar-btn" id="options-team-calendar" type="button" style="width:100%;padding:10px;">📅 Add Team Schedule</button>
     </div>
+    <div class="options-card" id="install-app-card" style="margin-top:12px;">
+      <div class="options-title">Install App</div>
+      <div class="options-copy" id="install-app-copy">Install Boyne RFC U13 on this device for faster access and an app-style experience.</div>
+      <button class="calendar-btn" id="install-app-btn" type="button" style="display:none;width:100%;padding:10px;">📱 Install App</button>
+      <div class="options-status" id="install-app-status">Checking installation availability…</div>
+    </div>
   </div>
 
 </div>
@@ -1204,6 +1210,20 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     el.innerHTML=html;
     const select=document.getElementById('stats-player');if(select)select.onchange=async()=>{selectedStatsPlayer=select.value;await renderStats();};
   }
+  let deferredInstallPrompt = null;
+  const isStandaloneApp = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isIosDevice = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    if(activeTab === 'options') renderOptions();
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    localStorage.setItem('boyneAppInstalled','true');
+    showToast('Boyne RFC U13 installed');
+    if(activeTab === 'options') renderOptions();
+  });
   function renderOptions(){
     const button = document.getElementById('notifications-off-btn');
     const status = document.getElementById('options-notification-status');
@@ -1217,6 +1237,39 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     if(accountStatus&&window.boyneCoachUser) accountStatus.textContent='Signed in as ' + (window.boyneCoachUser.email||'coach') + '.';
     const calendarButton=document.getElementById('options-team-calendar');
     if(calendarButton) calendarButton.onclick=()=>{const upcoming=events.filter(item=>!isHistoryEvent(item));downloadCalendar('boyne-rfc-u13-team-schedule.ics',upcoming,'Boyne RFC U13');};
+    const installCard=document.getElementById('install-app-card');
+    const installButton=document.getElementById('install-app-btn');
+    const installStatus=document.getElementById('install-app-status');
+    const installCopy=document.getElementById('install-app-copy');
+    if(installCard && installButton && installStatus && installCopy){
+      installCard.style.display='block';
+      installButton.style.display='none';
+      installButton.disabled=false;
+      if(isStandaloneApp()){
+        installCopy.textContent='Boyne RFC U13 is installed on this device.';
+        installStatus.textContent='✅ App already installed';
+      }else if(deferredInstallPrompt){
+        installCopy.textContent='Install Boyne RFC U13 on this device for faster access and an app-style experience.';
+        installButton.style.display='inline-flex';
+        installStatus.textContent='Ready to install';
+        installButton.onclick=async()=>{
+          if(!deferredInstallPrompt){showToast('Install option is not available yet');renderOptions();return;}
+          installButton.disabled=true;
+          deferredInstallPrompt.prompt();
+          const result=await deferredInstallPrompt.userChoice;
+          deferredInstallPrompt=null;
+          if(result.outcome==='accepted') showToast('App installation started');
+          else showToast('App installation cancelled');
+          renderOptions();
+        };
+      }else if(isIosDevice()){
+        installCopy.textContent='To install on iPhone or iPad, open this page in Safari, tap Share, then choose Add to Home Screen.';
+        installStatus.textContent='Safari installation instructions';
+      }else{
+        installCopy.textContent='Open the root Boyne RFC U13 page in Chrome, then return to Options when the browser makes installation available.';
+        installStatus.textContent='Install prompt is not currently available';
+      }
+    }
   }
   async function render(){
     document.body.classList.toggle('parent-only', PARENT_ONLY);
