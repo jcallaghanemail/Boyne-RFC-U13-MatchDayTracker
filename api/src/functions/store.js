@@ -91,7 +91,7 @@ app.http('store', {
       return response(405, { error: 'Method not allowed' });
     } catch (error) {
       context.error('Store API error', error);
-      return response(500, { error: 'Shared storage operation failed' });
+      return response(500, { error: 'Shared storage operation failed', detail: error && error.message ? error.message : String(error) });
     }
   }
 });
