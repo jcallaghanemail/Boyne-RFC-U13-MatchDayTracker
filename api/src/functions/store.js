@@ -1,5 +1,6 @@
 const { app } = require('@azure/functions');
 const { TableClient, AzureNamedKeyCredential } = require('@azure/data-tables');
+const { requireCoach } = require('../../auth');
 
 const TABLE_NAME = process.env.PITCHSIDE_TABLE_NAME || 'PitchsideData';
 const PARTITION_KEY = process.env.PITCHSIDE_PARTITION_KEY || 'boyne-u13';
@@ -56,6 +57,11 @@ app.http('store', {
       if (request.method === 'PUT') {
         const payload = await request.json();
         const key = payload && payload.key;
+        const parentWritable = key === 'poll-votes' || (typeof key === 'string' && key.startsWith('rsvp-'));
+        if (!parentWritable) {
+          const auth = await requireCoach(request);
+          if (!auth.ok) return response(auth.status, { error: auth.error });
+        }
         const value = payload && payload.value;
         if (!validKey(key) || typeof value !== 'string') {
           return response(400, { error: 'A valid key and string value are required' });
@@ -73,6 +79,8 @@ app.http('store', {
 
       if (request.method === 'DELETE') {
         const key = request.query.get('key');
+        const auth = await requireCoach(request);
+        if (!auth.ok) return response(auth.status, { error: auth.error });
         if (!validKey(key)) return response(400, { error: 'A valid key is required' });
         await table.deleteEntity(PARTITION_KEY, key).catch(error => {
           if (error.statusCode !== 404) throw error;

@@ -1,9 +1,12 @@
 const { app } = require('@azure/functions');
 const { firebaseMessaging } = require('../../firebase');
 const { getTokens, removeToken } = require('../../tokens');
+const { requireCoach } = require('../../auth');
 app.http('send-notification', {
   methods:['POST'], authLevel:'anonymous', route:'send-notification',
   handler: async request => {
+    const auth=await requireCoach(request);
+    if(!auth.ok) return {status:auth.status,jsonBody:{error:auth.error}};
     const body=await request.json();
     if(!body.title || !body.body) return {status:400,jsonBody:{error:'title and body are required'}};
     const audience=['parent','coach','all'].includes(body.audience) ? body.audience : 'all';
