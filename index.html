@@ -535,6 +535,20 @@
         <div><label>Date</label><input id="f-date" type="date"></div>
         <div><label>Time</label><input id="f-time" type="time"></div>
       </div>
+      <div id="training-repeat-wrap">
+        <label>Repeat Training Session</label>
+        <select id="f-repeat">
+          <option value="none">No Repeat</option>
+          <option value="weekly">Every Week</option>
+          <option value="fortnightly">Every 2 Weeks</option>
+          <option value="monthly">Every Month</option>
+        </select>
+      </div>
+      <div id="training-repeat-until" style="display:none;">
+        <label>Repeat Until</label>
+        <input id="f-repeat-until" type="date">
+        <div style="font-size:10.5px;color:var(--ink-soft);margin-top:4px;">The final session will be created on or before this date.</div>
+      </div>
       <div>
         <label>Location</label>
         <input id="f-location" placeholder="e.g. Home ground / Away">
@@ -1495,7 +1509,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
           <div class="event-type-badge ${ev.type}">${ev.type === 'match' ? 'Match' : 'Training'}</div>
           <div class="event-main">
             <div class="event-title">${escapeHtml(ev.title)}</div>
-            <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}</div>
+            <div class="event-meta">${fmtDate(ev.date, ev.time)}${ev.location ? ' · ' + escapeHtml(ev.location) : ''}${ev.seriesId ? ' · Recurring' : ''}</div>
             ${safeMapUrl(ev.mapLink) ? `<a class="map-link" href="${escapeAttr(safeMapUrl(ev.mapLink))}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">View in Google Maps</a>` : ''}
             ${!isHistoryEvent(ev) ? `<div class="calendar-actions"><button class="calendar-btn" data-add-calendar="${ev.id}">📅 Add to Calendar</button>${role === 'coach' ? `<button class="calendar-btn" data-send-reminder="${ev.id}">🔔 Send Reminder</button>` : ''}</div>` : ''}
             ${ev.archived ? '<span class="archived-badge">Archived</span>' : ''}
@@ -2068,7 +2082,14 @@ This permanently removes this history record and its RSVPs, attendance, score, c
       b.classList.add('sel');
       document.getElementById('f-opponent-wrap').style.display = newType === 'match' ? 'block' : 'none';
       document.getElementById('f-result-wrap').style.display = newType === 'match' ? 'block' : 'none';
+      document.getElementById('training-repeat-wrap').style.display = newType === 'training' ? 'block' : 'none';
+      const repeating = document.getElementById('f-repeat').value !== 'none';
+      document.getElementById('training-repeat-until').style.display = newType === 'training' && repeating ? 'block' : 'none';
     });
+  });
+  document.getElementById('f-repeat').addEventListener('change', () => {
+    const repeating = document.getElementById('f-repeat').value !== 'none';
+    document.getElementById('training-repeat-until').style.display = newType === 'training' && repeating ? 'block' : 'none';
   });
   document.getElementById('f-submit').addEventListener('click', async () => {
     const title = document.getElementById('f-title').value.trim();
@@ -2081,10 +2102,44 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     const homeScoreText = document.getElementById('f-home-score').value;
     const awayScoreText = document.getElementById('f-away-score').value;
     const hasHistoricalResult = newType === 'match' && homeScoreText !== '' && awayScoreText !== '';
+    const repeatType = newType === 'training' ? document.getElementById('f-repeat').value : 'none';
+    const repeatUntil = newType === 'training' ? document.getElementById('f-repeat-until').value : '';
     if(!title || !date){ showToast('Add a title and date first'); return; }
     if(mapLinkInput && !mapLink){ showToast('Paste a valid HTTPS Google Maps link'); return; }
-    const ev = { id: uid(), type: newType, title, date, time, location, mapLink, opponent, movedToHistory: hasHistoricalResult };
-    events.push(ev);
+    if(repeatType !== 'none' && !repeatUntil){ showToast('Add a repeat until date'); return; }
+    if(repeatType !== 'none' && repeatUntil < date){ showToast('Repeat until must be on or after the first date'); return; }
+    const seriesId = repeatType === 'none' ? null : uid();
+    const createdEvents = [];
+    const addEventForDate = eventDate => {
+      const item = { id: uid(), type: newType, title, date: eventDate, time, location, mapLink, opponent, movedToHistory: hasHistoricalResult };
+      if(seriesId){ item.seriesId = seriesId; item.repeatType = repeatType; item.repeatUntil = repeatUntil; }
+      events.push(item);
+      createdEvents.push(item);
+    };
+    const formatLocalDate = d => {
+      const pad = n => String(n).padStart(2,'0');
+      return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    };
+    addEventForDate(date);
+    if(repeatType !== 'none'){
+      let cursor = new Date(date + 'T12:00:00');
+      const end = new Date(repeatUntil + 'T23:59:59');
+      const originalDay = cursor.getDate();
+      while(createdEvents.length < 200){
+        if(repeatType === 'weekly') cursor.setDate(cursor.getDate() + 7);
+        else if(repeatType === 'fortnightly') cursor.setDate(cursor.getDate() + 14);
+        else if(repeatType === 'monthly'){
+          const targetMonth = cursor.getMonth() + 1;
+          cursor.setDate(1);
+          cursor.setMonth(targetMonth);
+          const lastDay = new Date(cursor.getFullYear(), cursor.getMonth()+1, 0).getDate();
+          cursor.setDate(Math.min(originalDay, lastDay));
+        }
+        if(cursor > end) break;
+        addEventForDate(formatLocalDate(cursor));
+      }
+    }
+    const ev = createdEvents[0];
     await saveEvents();
     await loadEvents();
     if(newType === 'match'){
@@ -2094,15 +2149,19 @@ This permanently removes this history record and its RSVPs, attendance, score, c
       };
       await saveScore(ev.id);
     }
-    await sendPushNotification(newType==='match'?'fixture-added':'training-added',newType==='match'?'New Fixture Added':'Training Added',title+' · '+fmtDate(date,time)+(location?' · '+location:''),{url:'/?portal=parent',eventId:ev.id});
+    const seriesNote = createdEvents.length > 1 ? ' · ' + createdEvents.length + ' sessions scheduled through ' + fmtDate(repeatUntil,'') : '';
+    await sendPushNotification(newType==='match'?'fixture-added':'training-added',newType==='match'?'New Fixture Added':'Training Added',title+' · '+fmtDate(date,time)+(location?' · '+location:'')+seriesNote,{url:'/?portal=parent',eventId:ev.id,seriesId:seriesId||''});
     document.getElementById('f-title').value = '';
     document.getElementById('f-opponent').value = '';
     document.getElementById('f-location').value = '';
     document.getElementById('f-map-link').value = '';
     document.getElementById('f-home-score').value = '';
     document.getElementById('f-away-score').value = '';
+    document.getElementById('f-repeat').value = 'none';
+    document.getElementById('f-repeat-until').value = '';
+    document.getElementById('training-repeat-until').style.display = 'none';
     document.getElementById('add-form').classList.remove('open');
-    showToast('Added to schedule');
+    showToast(createdEvents.length > 1 ? createdEvents.length + ' training sessions added' : 'Added to schedule');
     render();
   });
 
