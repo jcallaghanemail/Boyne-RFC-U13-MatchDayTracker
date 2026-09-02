@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Boyne RFC U13 Matchday Tracker",
+  "short_name": "Boyne RFC U13",
+  "description": "Fixtures, attendance, team selection, polls and matchday updates for Boyne RFC U13.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#122B22",
+  "theme_color": "#122B22",
+  "categories": ["sports", "productivity"],
+  "icons": [
+    {"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/icon-192-maskable.png","sizes":"192x192","type":"image/png","purpose":"maskable"},
+    {"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"/icon-512-maskable.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ]
+}
