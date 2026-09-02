@@ -706,7 +706,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     async set(key, value){
       const token = window.boyneGetAuthToken ? await window.boyneGetAuthToken() : null;
       const headers = { 'Content-Type': 'application/json' };
-      if(token){ headers.Authorization = 'Bearer ' + token; headers['X-Boyne-Authorization'] = 'Bearer ' + token; }
+      if(token){ headers['X-Boyne-Authorization'] = 'Bearer ' + token; }
       const response = await fetch('/api/store', {
         method: 'PUT',
         headers,
@@ -717,7 +717,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     },
     async remove(key){
       const token = window.boyneGetAuthToken ? await window.boyneGetAuthToken() : null;
-      const headers = token ? { Authorization: 'Bearer ' + token } : {};
+      const headers = token ? { 'X-Boyne-Authorization': 'Bearer ' + token } : {};
       const response = await fetch('/api/store?key=' + encodeURIComponent(key), {
         method: 'DELETE',
         headers,
@@ -769,7 +769,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     showToast._h = setTimeout(()=> t.classList.remove('show'), 2200);
   }
 
-  async function sendPushNotification(kind,title,body,data,audience='all'){try{const token=window.boyneGetAuthToken?await window.boyneGetAuthToken():null;if(!token)throw new Error('Coach login required');const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'X-Boyne-Authorization':'Bearer '+token},body:JSON.stringify({kind,title,body,data:data||{},audience})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
+  async function sendPushNotification(kind,title,body,data,audience='all'){try{const token=window.boyneGetAuthToken?await window.boyneGetAuthToken():null;if(!token)throw new Error('Coach login required');const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json','X-Boyne-Authorization':'Bearer '+token},body:JSON.stringify({kind,title,body,data:data||{},audience})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
   async function safeGet(key, shared){
     try{
       if(!shared) return localStorage.getItem(key);
