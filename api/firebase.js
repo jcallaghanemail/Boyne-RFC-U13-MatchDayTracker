@@ -1,7 +1,7 @@
 const { getApps, initializeApp, cert } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
 
-function firebaseMessaging(){
+function firebaseApp(){
   if(!getApps().length){
     const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
     if(!raw) throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not configured');
@@ -9,7 +9,7 @@ function firebaseMessaging(){
     if(serviceAccount.private_key) serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
     initializeApp({ credential: cert(serviceAccount) });
   }
-  return getMessaging();
+  return getApps()[0];
 }
-
-module.exports = { firebaseMessaging };
+function firebaseMessaging(){ return getMessaging(firebaseApp()); }
+module.exports = { firebaseApp, firebaseMessaging };
