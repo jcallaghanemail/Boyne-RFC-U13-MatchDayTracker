@@ -57,7 +57,7 @@ app.http('store', {
       if (request.method === 'PUT') {
         const payload = await request.json();
         const key = payload && payload.key;
-        const parentWritable = key === 'poll-votes' || (typeof key === 'string' && key.startsWith('rsvp-'));
+        const parentWritable = key === 'poll-votes' || key === 'news-reads' || (typeof key === 'string' && key.startsWith('rsvp-'));
         if (!parentWritable) {
           const auth = await requireCoach(request);
           if (!auth.ok) return response(auth.status, { error: auth.error });
