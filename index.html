@@ -97,7 +97,27 @@
   .app-tabs.coach-view .app-tab.coach-only{display:block;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
-  .selection-page,.history-page,.options-page,.polls-page,.dashboard-page,.stats-page{padding:16px;}
+  .selection-page,.history-page,.options-page,.polls-page,.dashboard-page,.stats-page,.news-page{padding:16px;}
+  .news-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
+  .news-card.pinned{border-color:#D9C27A;background:#FFF9E7;}
+  .news-card.emergency{border-color:#D99A93;background:var(--no-bg);}
+  .news-title{font-family:'Oswald';font-size:17px;font-weight:700;color:var(--pitch-deep);margin:5px 0;}
+  .news-meta{font-size:10.5px;color:var(--ink-soft);margin-bottom:9px;}
+  .news-body{font-size:12.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;}
+  .news-badge{display:inline-flex;padding:4px 7px;border-radius:10px;background:#EAF1EC;color:var(--pitch-mid);font-size:10px;font-weight:700;text-transform:uppercase;}
+  .news-badge.emergency{background:var(--no);color:#fff;}
+  .news-create input,.news-create select,.news-create textarea,.news-reader-select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;font-family:inherit;font-size:12px;margin-top:7px;}
+  .news-create textarea{min-height:110px;resize:vertical;}
+  .news-check{display:flex;align-items:center;gap:7px;margin:10px 0;font-size:12px;font-weight:700;}
+  .news-check input{width:auto;margin:0;}
+  .news-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;}
+  .news-actions button{flex:1;border-radius:8px;padding:8px;font-family:'Oswald';font-size:11px;font-weight:700;cursor:pointer;}
+  .news-read-btn{border:1px solid var(--going);background:var(--going-bg);color:var(--going);}
+  .news-pin-btn{border:1px solid var(--pitch-mid);background:#fff;color:var(--pitch-mid);}
+  .news-delete-btn{border:1px solid var(--no);background:#fff;color:var(--no);}
+  .news-read-summary{margin-top:11px;padding-top:10px;border-top:1px dashed var(--line);font-size:11px;line-height:1.5;}
+  .news-unread{color:var(--no);margin-top:4px;}
+  .news-read{color:var(--going);margin-top:4px;}
   .dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
   .dashboard-metric{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px;}
   .dashboard-number{font-family:'JetBrains Mono';font-size:24px;font-weight:700;color:var(--pitch-deep);}
@@ -518,6 +538,7 @@
     <button class="app-tab coach-only" data-tab="stats">Stats</button>
     <button class="app-tab" data-tab="history">History</button>
     <button class="app-tab" data-tab="polls">Polls</button>
+    <button class="app-tab" data-tab="news">News</button>
     <button class="app-tab" data-tab="options">Options</button>
   </div>
 
@@ -610,6 +631,7 @@
   <div class="stats-page" id="stats-content" style="display:none;"></div>
   <div class="history-page" id="history-content" style="display:none;"></div>
   <div class="polls-page" id="polls-content" style="display:none;"></div>
+  <div class="news-page" id="news-content" style="display:none;"></div>
   <div class="options-page" id="options-content" style="display:none;">
     <div class="options-card">
       <div class="options-title">Notification Options</div>
@@ -747,6 +769,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let matchNotesCache = {}; // eventId -> coach match notes
   let polls = [];
   let pollVotes = {}; // pollId -> { playerName: optionId }
+  let newsPosts = [];
+  let newsReads = {}; // postId -> { playerName: { readAt } }
+  let newsDraftTitle = localStorage.getItem('news-draft-title') || '';
+  let newsDraftBody = localStorage.getItem('news-draft-body') || '';
   let pollDraftQuestion=localStorage.getItem('poll-draft-question') || '';
   let pollDraftOptions=localStorage.getItem('poll-draft-options') || '';
 
@@ -763,7 +789,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     showToast._h = setTimeout(()=> t.classList.remove('show'), 2200);
   }
 
-  async function sendPushNotification(kind,title,body,data){try{const token=window.boyneGetAuthToken?await window.boyneGetAuthToken():null;if(!token)throw new Error('Coach login required');const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({kind,title,body,data:data||{},audience:'all'})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
+  async function sendPushNotification(kind,title,body,data,audience='all'){try{const token=window.boyneGetAuthToken?await window.boyneGetAuthToken():null;if(!token)throw new Error('Coach login required');const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({kind,title,body,data:data||{},audience})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
   async function safeGet(key, shared){
     try{
       if(!shared) return localStorage.getItem(key);
@@ -815,6 +841,20 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   async function savePolls(){
     await safeSet('polls', JSON.stringify(polls), true);
     await safeSet('poll-votes', JSON.stringify(pollVotes), true);
+  }
+  async function loadNews(){
+    const p = await safeGet('news-posts', true);
+    const r = await safeGet('news-reads', true);
+    try{ newsPosts = p ? JSON.parse(p) : []; }catch(e){ newsPosts = []; }
+    try{ newsReads = r ? JSON.parse(r) : {}; }catch(e){ newsReads = {}; }
+    if(!Array.isArray(newsPosts)) newsPosts = [];
+    if(!newsReads || typeof newsReads !== 'object') newsReads = {};
+  }
+  async function saveNewsPosts(){
+    await safeSet('news-posts', JSON.stringify(newsPosts), true);
+  }
+  async function saveNewsReads(){
+    await safeSet('news-reads', JSON.stringify(newsReads), true);
   }
   async function loadRoster(){
     const v = await safeGet('roster', true);
@@ -1138,6 +1178,79 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.querySelectorAll('[data-toggle-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-toggle-poll'));if(!p)return;p.open=!p.open;await savePolls();showToast(p.open?'Poll reopened':'Poll closed');renderPolls();});
     document.querySelectorAll('[data-delete-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach'||!confirm('Delete this poll and all responses?'))return;const id=b.getAttribute('data-delete-poll');polls=polls.filter(x=>x.id!==id);delete pollVotes[id];await savePolls();showToast('Poll deleted');renderPolls();});
   }
+  function newsCategoryLabel(value){
+    return ['General','Training','Fixture','Social','Fundraising','Emergency'].includes(value) ? value : 'General';
+  }
+  function renderNews(){
+    const el=document.getElementById('news-content');
+    let html='<div class="section-label" style="margin:4px 0 12px;"><span class="num">&#8226;</span> Team News</div>';
+    if(role==='coach'){
+      html+='<div class="news-card news-create"><div class="news-title">Publish an Update</div>'+ 
+        '<input id="news-title-input" maxlength="160" placeholder="News title" value="'+escapeAttr(newsDraftTitle)+'">'+
+        '<select id="news-category-input"><option>General</option><option>Training</option><option>Fixture</option><option>Social</option><option>Fundraising</option><option>Emergency</option></select>'+
+        '<textarea id="news-body-input" maxlength="3000" placeholder="Write the update for parents">'+escapeHtml(newsDraftBody)+'</textarea>'+
+        '<label class="news-check"><input id="news-pinned-input" type="checkbox"> Pin this post to the top</label>'+
+        '<button class="primary-btn" id="news-publish-btn" style="width:100%;">Publish and Notify Parents</button></div>';
+    }else{
+      html+='<div class="news-card"><div class="news-title">Read Receipts</div><div class="news-meta">Choose your player. Opening a post and pressing Mark as Read records that it has been seen.</div><select class="news-reader-select" id="news-reader-select"><option value="">— choose player —</option>'+roster.map(name=>'<option value="'+escapeAttr(name)+'" '+(name===selectedChild?'selected':'')+'>'+escapeHtml(name)+'</option>').join('')+'</select></div>';
+    }
+    const ordered=newsPosts.slice().sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(b.createdAt||'').localeCompare(a.createdAt||''));
+    if(!ordered.length) html+='<div class="empty-state"><div class="big">No news yet</div><div>'+(role==='coach'?'Publish the first team update above.':'Coach updates will appear here.')+'</div></div>';
+    ordered.forEach(post=>{
+      const reads=newsReads[post.id]||{};
+      const readNames=roster.filter(name=>!!reads[name]);
+      const unreadNames=roster.filter(name=>!reads[name]);
+      const mine=selectedChild&&reads[selectedChild];
+      const category=newsCategoryLabel(post.category);
+      html+='<article class="news-card '+(post.pinned?'pinned ':'')+(category==='Emergency'?'emergency':'')+'">'+
+        '<span class="news-badge '+(category==='Emergency'?'emergency':'')+'">'+(post.pinned?'Pinned · ':'')+escapeHtml(category)+'</span>'+
+        '<div class="news-title">'+escapeHtml(post.title)+'</div><div class="news-meta">Published '+escapeHtml(fmtAdded(post.createdAt))+(post.createdBy?' by '+escapeHtml(post.createdBy):'')+'</div>'+
+        '<div class="news-body">'+escapeHtml(post.body)+'</div>';
+      if(role==='parent'){
+        html+='<div class="news-actions"><button class="news-read-btn" data-read-news="'+post.id+'" '+(!selectedChild||mine?'disabled':'')+'>'+(mine?'✓ Read '+escapeHtml(fmtAdded(mine.readAt)):'Mark as Read')+'</button></div>';
+      }else{
+        html+='<div class="news-read-summary"><strong>Read '+readNames.length+' / '+roster.length+'</strong><div class="news-read"><strong>Read:</strong> '+(readNames.length?readNames.map(escapeHtml).join(', '):'None yet')+'</div><div class="news-unread"><strong>Unread:</strong> '+(unreadNames.length?unreadNames.map(escapeHtml).join(', '):'Everyone has read this')+'</div></div>'+
+          '<div class="news-actions"><button class="news-pin-btn" data-pin-news="'+post.id+'">'+(post.pinned?'Unpin':'Pin')+'</button><button class="news-delete-btn" data-delete-news="'+post.id+'">Delete</button></div>';
+      }
+      html+='</article>';
+    });
+    el.innerHTML=html;
+    attachNewsHandlers();
+  }
+  function attachNewsHandlers(){
+    const reader=document.getElementById('news-reader-select');
+    if(reader) reader.onchange=async()=>{selectedChild=reader.value;if(selectedChild)await rememberChildName(selectedChild);renderNews();};
+    const title=document.getElementById('news-title-input'),body=document.getElementById('news-body-input');
+    if(title) title.oninput=()=>{newsDraftTitle=title.value;localStorage.setItem('news-draft-title',newsDraftTitle);};
+    if(body) body.oninput=()=>{newsDraftBody=body.value;localStorage.setItem('news-draft-body',newsDraftBody);};
+    const publish=document.getElementById('news-publish-btn');
+    if(publish) publish.onclick=async()=>{
+      if(role!=='coach')return;
+      const titleValue=title.value.trim(),bodyValue=body.value.trim();
+      if(!titleValue||!bodyValue){showToast('Add a title and message');return;}
+      publish.disabled=true;
+      const post={id:uid(),title:titleValue,body:bodyValue,category:document.getElementById('news-category-input').value,pinned:document.getElementById('news-pinned-input').checked,createdAt:new Date().toISOString(),createdBy:(window.boyneCoachUser&&window.boyneCoachUser.email)||'Coach'};
+      if(post.pinned) newsPosts.forEach(item=>item.pinned=false);
+      newsPosts.push(post);
+      await saveNewsPosts();
+      newsDraftTitle='';newsDraftBody='';localStorage.removeItem('news-draft-title');localStorage.removeItem('news-draft-body');
+      await sendPushNotification('news',post.category==='Emergency'?'Important Team Update':post.title,post.body.slice(0,220),{url:'/?portal=parent&tab=news&newsId='+encodeURIComponent(post.id),newsId:post.id},'parent');
+      showToast('News published');renderNews();
+    };
+    document.querySelectorAll('[data-read-news]').forEach(btn=>btn.onclick=async()=>{
+      if(role!=='parent'||!selectedChild||btn.disabled)return;
+      const id=btn.getAttribute('data-read-news');if(!newsReads[id])newsReads[id]={};newsReads[id][selectedChild]={readAt:new Date().toISOString()};
+      await saveNewsReads();showToast('Marked as read for '+selectedChild);renderNews();
+    });
+    document.querySelectorAll('[data-pin-news]').forEach(btn=>btn.onclick=async()=>{
+      if(role!=='coach')return;const id=btn.getAttribute('data-pin-news'),post=newsPosts.find(item=>item.id===id);if(!post)return;
+      const next=!post.pinned;newsPosts.forEach(item=>item.pinned=false);post.pinned=next;await saveNewsPosts();showToast(next?'Post pinned':'Post unpinned');renderNews();
+    });
+    document.querySelectorAll('[data-delete-news]').forEach(btn=>btn.onclick=async()=>{
+      if(role!=='coach')return;const id=btn.getAttribute('data-delete-news'),post=newsPosts.find(item=>item.id===id);if(!post||!confirm('Delete "'+post.title+'" and its read receipts?'))return;
+      newsPosts=newsPosts.filter(item=>item.id!==id);delete newsReads[id];await Promise.all([saveNewsPosts(),saveNewsReads()]);showToast('News post deleted');renderNews();
+    });
+  }
   async function ensureEventData(ev){
     await Promise.all([loadRsvp(ev.id),loadCoachRsvp(ev.id),loadCheckin(ev.id)]);
     if(ev.type==='match') await Promise.all([loadScore(ev.id),loadTeam(ev.id)]);
@@ -1276,11 +1389,11 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   }
   async function render(){
     document.body.classList.toggle('parent-only', PARENT_ONLY);
-    if(PARENT_ONLY){ role = 'parent'; if(!['fixtures','history','polls','options'].includes(activeTab)) activeTab = 'fixtures'; }
+    if(PARENT_ONLY){ role = 'parent'; if(!['fixtures','history','polls','news','options'].includes(activeTab)) activeTab = 'fixtures'; }
     renderChildStrip();
     document.getElementById('role-parent').classList.toggle('active', role === 'parent');
     document.getElementById('role-coach').classList.toggle('active', role === 'coach');
-    if(role !== 'coach' && !['fixtures','history','polls','options'].includes(activeTab)) activeTab = 'fixtures';
+    if(role !== 'coach' && !['fixtures','history','polls','news','options'].includes(activeTab)) activeTab = 'fixtures';
     const tabs = document.getElementById('app-tabs');
     tabs.classList.add('show');
     tabs.classList.toggle('coach-view', role === 'coach');
@@ -1292,6 +1405,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.getElementById('history-content').style.display = activeTab === 'history' ? 'block' : 'none';
     document.getElementById('options-content').style.display = activeTab === 'options' ? 'block' : 'none';
     document.getElementById('polls-content').style.display = activeTab === 'polls' ? 'block' : 'none';
+    document.getElementById('news-content').style.display = activeTab === 'news' ? 'block' : 'none';
     document.getElementById('add-event-card').style.display = role === 'coach' && activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
     document.getElementById('coach-roster-card').style.display = role === 'coach' && activeTab === 'squad' ? 'block' : 'none';
@@ -1305,6 +1419,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     }
     if(activeTab === 'options'){renderOptions();return;}
     if(activeTab === 'polls'){renderPolls();return;}
+    if(activeTab === 'news'){renderNews();return;}
 
     const content = document.getElementById('content');
     if(!loaded){
@@ -2167,7 +2282,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     if(!user){showCoachLogin();return;}
     role='coach';activeTab='dashboard';openEventId=null;recordCoachActivity();await render();
   }
-  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','polls','options'].includes(activeTab)) activeTab='fixtures'; render(); });
+  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','polls','news','options'].includes(activeTab)) activeTab='fixtures'; render(); });
   document.getElementById('role-coach').addEventListener('click', () => { if(!PARENT_ONLY) enterCoachArea(); });
   document.getElementById('coach-login-cancel').addEventListener('click',hideCoachLogin);
   loginModal.addEventListener('click',e=>{if(e.target===loginModal)hideCoachLogin();});
@@ -2359,11 +2474,13 @@ This permanently removes this history record and its RSVPs, attendance, score, c
   // Poll for live updates from other users
   async function refreshLive(){
     const pollEditorActive = activeTab === 'polls' && role === 'coach' && (document.activeElement?.id === 'poll-question' || document.activeElement?.id === 'poll-options');
-    if(pollEditorActive) return;
+    const newsEditorActive = activeTab === 'news' && role === 'coach' && ['news-title-input','news-body-input'].includes(document.activeElement?.id);
+    if(pollEditorActive || newsEditorActive) return;
     await loadEvents();
     await loadRoster();
     await loadCoachRoster();
     await loadPolls();
+    await loadNews();
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     if(openEventId){
       const ev = events.find(e => e.id === openEventId);
@@ -2395,8 +2512,11 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadLastCoachName();
     await loadEvents();
     await loadPolls();
+    await loadNews();
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     loaded = true;
+    const requestedTab=new URLSearchParams(location.search).get('tab');
+    if(['fixtures','history','polls','news','options'].includes(requestedTab)) activeTab=requestedTab;
     await render();
     if(PORTAL_MODE === 'coach' && !PARENT_ONLY){
       const user=window.boyneAuthReady?await window.boyneAuthReady:null;
