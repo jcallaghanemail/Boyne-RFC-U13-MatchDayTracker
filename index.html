@@ -706,7 +706,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     async set(key, value){
       const token = window.boyneGetAuthToken ? await window.boyneGetAuthToken() : null;
       const headers = { 'Content-Type': 'application/json' };
-      if(token){ headers.Authorization = 'Bearer ' + token; headers['X-Boyne-Authorization'] = 'Bearer ' + token; }
+      if(token){ headers.Authorization = 'Bearer ' + token
       const response = await fetch('/api/store', {
         method: 'PUT',
         headers,
