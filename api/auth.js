@@ -2,7 +2,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { firebaseApp } = require('./firebase');
 
 function bearerToken(request){
-  const header = request.headers.get('authorization') || request.headers.get('x-boyne-authorization') || '';
+  const header = request.headers.get('authorization') ||
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match ? match[1].trim() : null;
 }
