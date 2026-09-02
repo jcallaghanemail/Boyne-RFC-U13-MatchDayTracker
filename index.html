@@ -98,26 +98,7 @@
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
   .selection-page,.history-page,.options-page,.polls-page,.dashboard-page,.stats-page,.news-page{padding:16px;}
-  .news-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
-  .news-card.pinned{border-color:#D9C27A;background:#FFF9E7;}
-  .news-card.emergency{border-color:#D99A93;background:var(--no-bg);}
-  .news-title{font-family:'Oswald';font-size:17px;font-weight:700;color:var(--pitch-deep);margin:5px 0;}
-  .news-meta{font-size:10.5px;color:var(--ink-soft);margin-bottom:9px;}
-  .news-body{font-size:12.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;}
-  .news-badge{display:inline-flex;padding:4px 7px;border-radius:10px;background:#EAF1EC;color:var(--pitch-mid);font-size:10px;font-weight:700;text-transform:uppercase;}
-  .news-badge.emergency{background:var(--no);color:#fff;}
-  .news-create input,.news-create select,.news-create textarea,.news-reader-select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;font-family:inherit;font-size:12px;margin-top:7px;}
-  .news-create textarea{min-height:110px;resize:vertical;}
-  .news-check{display:flex;align-items:center;gap:7px;margin:10px 0;font-size:12px;font-weight:700;}
-  .news-check input{width:auto;margin:0;}
-  .news-actions{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;}
-  .news-actions button{flex:1;border-radius:8px;padding:8px;font-family:'Oswald';font-size:11px;font-weight:700;cursor:pointer;}
-  .news-read-btn{border:1px solid var(--going);background:var(--going-bg);color:var(--going);}
-  .news-pin-btn{border:1px solid var(--pitch-mid);background:#fff;color:var(--pitch-mid);}
-  .news-delete-btn{border:1px solid var(--no);background:#fff;color:var(--no);}
-  .news-read-summary{margin-top:11px;padding-top:10px;border-top:1px dashed var(--line);font-size:11px;line-height:1.5;}
-  .news-unread{color:var(--no);margin-top:4px;}
-  .news-read{color:var(--going);margin-top:4px;}
+  .news-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}.news-card.pinned{background:#FFF9E7;border-color:#D9C27A}.news-card.emergency{background:var(--no-bg);border-color:#D99A93}.news-title{font-family:'Oswald';font-size:17px;font-weight:700;color:var(--pitch-deep);margin:6px 0}.news-meta{font-size:10.5px;color:var(--ink-soft);margin-bottom:9px}.news-body{font-size:12.5px;line-height:1.55;white-space:pre-wrap}.news-badge{display:inline-flex;padding:4px 7px;border-radius:10px;background:#EAF1EC;color:var(--pitch-mid);font-size:10px;font-weight:700;text-transform:uppercase}.news-badge.emergency{background:var(--no);color:#fff}.news-create input,.news-create select,.news-create textarea,.news-reader-select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;font-family:inherit;font-size:12px;margin-top:7px}.news-create textarea{min-height:110px;resize:vertical}.news-check{display:flex;align-items:center;gap:7px;margin:10px 0;font-size:12px;font-weight:700}.news-check input{width:auto;margin:0}.news-actions{display:flex;gap:7px;margin-top:11px}.news-actions button{flex:1;border-radius:8px;padding:8px;font-family:'Oswald';font-size:11px;font-weight:700}.news-read-btn{border:1px solid var(--going);background:var(--going-bg);color:var(--going)}.news-pin-btn{border:1px solid var(--pitch-mid);background:#fff;color:var(--pitch-mid)}.news-delete-btn{border:1px solid var(--no);background:#fff;color:var(--no)}.news-read-summary{margin-top:11px;padding-top:10px;border-top:1px dashed var(--line);font-size:11px;line-height:1.5}.news-read{color:var(--going);margin-top:4px}
   .dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
   .dashboard-metric{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px;}
   .dashboard-number{font-family:'JetBrains Mono';font-size:24px;font-weight:700;color:var(--pitch-deep);}
@@ -769,10 +750,9 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let matchNotesCache = {}; // eventId -> coach match notes
   let polls = [];
   let pollVotes = {}; // pollId -> { playerName: optionId }
-  let newsPosts = [];
-  let newsReads = {}; // postId -> { playerName: { readAt } }
-  let newsDraftTitle = localStorage.getItem('news-draft-title') || '';
-  let newsDraftBody = localStorage.getItem('news-draft-body') || '';
+  let newsPosts=[],newsReads={},newsOperationActive=false;
+  let newsDraftTitle=localStorage.getItem('news-draft-title')||'',newsDraftBody=localStorage.getItem('news-draft-body')||'';
+  const newsDeviceId=localStorage.getItem('boyne-news-device-id')||('device-'+uid());localStorage.setItem('boyne-news-device-id',newsDeviceId);
   let pollDraftQuestion=localStorage.getItem('poll-draft-question') || '';
   let pollDraftOptions=localStorage.getItem('poll-draft-options') || '';
 
@@ -842,20 +822,9 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     await safeSet('polls', JSON.stringify(polls), true);
     await safeSet('poll-votes', JSON.stringify(pollVotes), true);
   }
-  async function loadNews(){
-    const p = await safeGet('news-posts', true);
-    const r = await safeGet('news-reads', true);
-    try{ newsPosts = p ? JSON.parse(p) : []; }catch(e){ newsPosts = []; }
-    try{ newsReads = r ? JSON.parse(r) : {}; }catch(e){ newsReads = {}; }
-    if(!Array.isArray(newsPosts)) newsPosts = [];
-    if(!newsReads || typeof newsReads !== 'object') newsReads = {};
-  }
-  async function saveNewsPosts(){
-    await safeSet('news-posts', JSON.stringify(newsPosts), true);
-  }
-  async function saveNewsReads(){
-    await safeSet('news-reads', JSON.stringify(newsReads), true);
-  }
+  async function loadNews(){const p=await safeGet('news-posts',true),r=await safeGet('news-reads',true);try{newsPosts=p?JSON.parse(p):[]}catch(e){newsPosts=[]}try{newsReads=r?JSON.parse(r):{}}catch(e){newsReads={}}if(!Array.isArray(newsPosts))newsPosts=[];if(!newsReads||typeof newsReads!=='object')newsReads={};}
+  async function saveNewsPosts(){return await safeSet('news-posts',JSON.stringify(newsPosts),true);}
+  async function saveNewsReads(){return await safeSet('news-reads',JSON.stringify(newsReads),true);}
   async function loadRoster(){
     const v = await safeGet('roster', true);
     roster = v ? JSON.parse(v) : [];
@@ -1178,9 +1147,6 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.querySelectorAll('[data-toggle-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach')return;const p=polls.find(x=>x.id===b.getAttribute('data-toggle-poll'));if(!p)return;p.open=!p.open;await savePolls();showToast(p.open?'Poll reopened':'Poll closed');renderPolls();});
     document.querySelectorAll('[data-delete-poll]').forEach(b=>b.onclick=async()=>{if(role!=='coach'||!confirm('Delete this poll and all responses?'))return;const id=b.getAttribute('data-delete-poll');polls=polls.filter(x=>x.id!==id);delete pollVotes[id];await savePolls();showToast('Poll deleted');renderPolls();});
   }
-  function newsCategoryLabel(value){
-    return ['General','Training','Fixture','Social','Fundraising','Emergency'].includes(value) ? value : 'General';
-  }
   function renderNews(){
     const el=document.getElementById('news-content');
     let html='<div class="section-label" style="margin:4px 0 12px;"><span class="num">&#8226;</span> Team News</div>';
@@ -1192,25 +1158,25 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         '<label class="news-check"><input id="news-pinned-input" type="checkbox"> Pin this post to the top</label>'+
         '<button class="primary-btn" id="news-publish-btn" style="width:100%;">Publish and Notify Parents</button></div>';
     }else{
-      html+='<div class="news-card"><div class="news-title">Read Receipts</div><div class="news-meta">Choose your player. Opening a post and pressing Mark as Read records that it has been seen.</div><select class="news-reader-select" id="news-reader-select"><option value="">— choose player —</option>'+roster.map(name=>'<option value="'+escapeAttr(name)+'" '+(name===selectedChild?'selected':'')+'>'+escapeHtml(name)+'</option>').join('')+'</select></div>';
+      html+='<div class="news-card"><div class="news-title">Parent Read Receipt</div><div class="news-meta">Enter the parent or guardian name once. Press Acknowledge as Read on each post so the coach can see it has been read.</div><input class="news-reader-select" id="news-parent-name" maxlength="80" placeholder="Parent or guardian name" value="'+escapeAttr(parentName)+'"></div>';
     }
     const ordered=newsPosts.slice().sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(b.createdAt||'').localeCompare(a.createdAt||''));
     if(!ordered.length) html+='<div class="empty-state"><div class="big">No news yet</div><div>'+(role==='coach'?'Publish the first team update above.':'Coach updates will appear here.')+'</div></div>';
     ordered.forEach(post=>{
       const reads=newsReads[post.id]||{};
-      const readNames=roster.filter(name=>!!reads[name]);
-      const unreadNames=roster.filter(name=>!reads[name]);
-      const mine=selectedChild&&reads[selectedChild];
+      const receipts=Object.values(reads).filter(item=>item&&item.parentName).sort((a,b)=>(a.parentName||'').localeCompare(b.parentName||''));
+      const mine=reads[newsDeviceId];
       const category=newsCategoryLabel(post.category);
       html+='<article class="news-card '+(post.pinned?'pinned ':'')+(category==='Emergency'?'emergency':'')+'">'+
         '<span class="news-badge '+(category==='Emergency'?'emergency':'')+'">'+(post.pinned?'Pinned · ':'')+escapeHtml(category)+'</span>'+
         '<div class="news-title">'+escapeHtml(post.title)+'</div><div class="news-meta">Published '+escapeHtml(fmtAdded(post.createdAt))+(post.createdBy?' by '+escapeHtml(post.createdBy):'')+'</div>'+
         '<div class="news-body">'+escapeHtml(post.body)+'</div>';
       if(role==='parent'){
-        html+='<div class="news-actions"><button class="news-read-btn" data-read-news="'+post.id+'" '+(!selectedChild||mine?'disabled':'')+'>'+(mine?'✓ Read '+escapeHtml(fmtAdded(mine.readAt)):'Mark as Read')+'</button></div>';
+        html+='<div class="news-actions"><button class="news-read-btn" data-read-news="'+post.id+'" '+(mine?'disabled':'')+'>'+(mine?'✓ Read by '+escapeHtml(mine.parentName)+' · '+escapeHtml(fmtAdded(mine.readAt)):'Acknowledge as Read')+'</button></div>';
       }else{
-        html+='<div class="news-read-summary"><strong>Read '+readNames.length+' / '+roster.length+'</strong><div class="news-read"><strong>Read:</strong> '+(readNames.length?readNames.map(escapeHtml).join(', '):'None yet')+'</div><div class="news-unread"><strong>Unread:</strong> '+(unreadNames.length?unreadNames.map(escapeHtml).join(', '):'Everyone has read this')+'</div></div>'+
-          '<div class="news-actions"><button class="news-pin-btn" data-pin-news="'+post.id+'">'+(post.pinned?'Unpin':'Pin')+'</button><button class="news-delete-btn" data-delete-news="'+post.id+'">Delete</button></div>';
+        const names=receipts.map(item=>item.parentName);
+        html+='<div class="news-read-summary"><strong>'+receipts.length+' parent read receipt'+(receipts.length===1?'':'s')+'</strong><div class="news-read"><strong>Read by:</strong> '+(names.length?names.map(escapeHtml).join(', '):'No parent acknowledgements yet')+'</div></div>'+
+          '<div class="news-actions"><button class="news-pin-btn" data-pin-news="'+post.id+'">'+(post.pinned?'Unpin':'Pin')+'</button><button class="news-delete-btn" data-delete-news="'+post.id+'">Delete Post</button></div>';
       }
       html+='</article>';
     });
@@ -1218,8 +1184,11 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     attachNewsHandlers();
   }
   function attachNewsHandlers(){
-    const reader=document.getElementById('news-reader-select');
-    if(reader) reader.onchange=async()=>{selectedChild=reader.value;if(selectedChild)await rememberChildName(selectedChild);renderNews();};
+    const parentInput=document.getElementById('news-parent-name');
+    if(parentInput){
+      parentInput.oninput=()=>{parentName=parentInput.value;localStorage.setItem('parent-display-name',parentName);};
+      parentInput.onkeydown=e=>e.stopPropagation();
+    }
     const title=document.getElementById('news-title-input'),body=document.getElementById('news-body-input');
     if(title) title.oninput=()=>{newsDraftTitle=title.value;localStorage.setItem('news-draft-title',newsDraftTitle);};
     if(body) body.oninput=()=>{newsDraftBody=body.value;localStorage.setItem('news-draft-body',newsDraftBody);};
@@ -1228,27 +1197,38 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       if(role!=='coach')return;
       const titleValue=title.value.trim(),bodyValue=body.value.trim();
       if(!titleValue||!bodyValue){showToast('Add a title and message');return;}
-      publish.disabled=true;
+      publish.disabled=true;newsOperationActive=true;
+      const previous=newsPosts.slice();
       const post={id:uid(),title:titleValue,body:bodyValue,category:document.getElementById('news-category-input').value,pinned:document.getElementById('news-pinned-input').checked,createdAt:new Date().toISOString(),createdBy:(window.boyneCoachUser&&window.boyneCoachUser.email)||'Coach'};
       if(post.pinned) newsPosts.forEach(item=>item.pinned=false);
       newsPosts.push(post);
-      await saveNewsPosts();
+      const saved=await saveNewsPosts();
+      if(!saved){newsPosts=previous;publish.disabled=false;newsOperationActive=false;showToast('Post was not saved. Please try again.');renderNews();return;}
+      await loadNews();
       newsDraftTitle='';newsDraftBody='';localStorage.removeItem('news-draft-title');localStorage.removeItem('news-draft-body');
       await sendPushNotification('news',post.category==='Emergency'?'Important Team Update':post.title,post.body.slice(0,220),{url:'/?portal=parent&tab=news&newsId='+encodeURIComponent(post.id),newsId:post.id},'parent');
-      showToast('News published');renderNews();
+      newsOperationActive=false;showToast('News published and saved');renderNews();
     };
     document.querySelectorAll('[data-read-news]').forEach(btn=>btn.onclick=async()=>{
-      if(role!=='parent'||!selectedChild||btn.disabled)return;
-      const id=btn.getAttribute('data-read-news');if(!newsReads[id])newsReads[id]={};newsReads[id][selectedChild]={readAt:new Date().toISOString()};
-      await saveNewsReads();showToast('Marked as read for '+selectedChild);renderNews();
+      if(role!=='parent'||btn.disabled)return;
+      const name=String(parentName||'').trim();
+      if(!name){showToast('Enter the parent or guardian name first');if(parentInput)parentInput.focus();return;}
+      parentName=name;localStorage.setItem('parent-display-name',name);newsOperationActive=true;
+      const id=btn.getAttribute('data-read-news');if(!newsReads[id])newsReads[id]={};newsReads[id][newsDeviceId]={parentName:name,readAt:new Date().toISOString()};
+      const saved=await saveNewsReads();
+      if(saved){await loadNews();showToast('Coach can now see this was read');}else showToast('Read receipt was not saved');
+      newsOperationActive=false;renderNews();
     });
     document.querySelectorAll('[data-pin-news]').forEach(btn=>btn.onclick=async()=>{
-      if(role!=='coach')return;const id=btn.getAttribute('data-pin-news'),post=newsPosts.find(item=>item.id===id);if(!post)return;
-      const next=!post.pinned;newsPosts.forEach(item=>item.pinned=false);post.pinned=next;await saveNewsPosts();showToast(next?'Post pinned':'Post unpinned');renderNews();
+      if(role!=='coach')return;newsOperationActive=true;const id=btn.getAttribute('data-pin-news'),post=newsPosts.find(item=>item.id===id);if(!post){newsOperationActive=false;return;}
+      const next=!post.pinned;newsPosts.forEach(item=>item.pinned=false);post.pinned=next;const saved=await saveNewsPosts();if(saved)await loadNews();newsOperationActive=false;showToast(saved?(next?'Post pinned':'Post unpinned'):'Change was not saved');renderNews();
     });
     document.querySelectorAll('[data-delete-news]').forEach(btn=>btn.onclick=async()=>{
-      if(role!=='coach')return;const id=btn.getAttribute('data-delete-news'),post=newsPosts.find(item=>item.id===id);if(!post||!confirm('Delete "'+post.title+'" and its read receipts?'))return;
-      newsPosts=newsPosts.filter(item=>item.id!==id);delete newsReads[id];await Promise.all([saveNewsPosts(),saveNewsReads()]);showToast('News post deleted');renderNews();
+      if(role!=='coach')return;const id=btn.getAttribute('data-delete-news'),post=newsPosts.find(item=>item.id===id);if(!post||!confirm('Delete "'+post.title+'" and its parent read receipts?'))return;
+      newsOperationActive=true;const previousPosts=newsPosts.slice(),previousReads=JSON.parse(JSON.stringify(newsReads));newsPosts=newsPosts.filter(item=>item.id!==id);delete newsReads[id];
+      const postsSaved=await saveNewsPosts(),readsSaved=await saveNewsReads();
+      if(postsSaved&&readsSaved){await loadNews();showToast('News post deleted');}else{newsPosts=previousPosts;newsReads=previousReads;showToast('Post could not be deleted');}
+      newsOperationActive=false;renderNews();
     });
   }
   async function ensureEventData(ev){
@@ -2474,8 +2454,8 @@ This permanently removes this history record and its RSVPs, attendance, score, c
   // Poll for live updates from other users
   async function refreshLive(){
     const pollEditorActive = activeTab === 'polls' && role === 'coach' && (document.activeElement?.id === 'poll-question' || document.activeElement?.id === 'poll-options');
-    const newsEditorActive = activeTab === 'news' && role === 'coach' && ['news-title-input','news-body-input'].includes(document.activeElement?.id);
-    if(pollEditorActive || newsEditorActive) return;
+    const newsEditorActive=activeTab==='news'&&role==='coach'&&['news-title-input','news-body-input'].includes(document.activeElement?.id);
+    if(pollEditorActive||newsEditorActive||newsOperationActive)return;
     await loadEvents();
     await loadRoster();
     await loadCoachRoster();
@@ -2515,15 +2495,13 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadNews();
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     loaded = true;
-    const requestedTab=new URLSearchParams(location.search).get('tab');
-    if(['fixtures','history','polls','news','options'].includes(requestedTab)) activeTab=requestedTab;
     await render();
     if(PORTAL_MODE === 'coach' && !PARENT_ONLY){
       const user=window.boyneAuthReady?await window.boyneAuthReady:null;
       if(user){role='coach';activeTab='dashboard';recordCoachActivity();await render();}else showCoachLogin();
     }
     setInterval(updateVisibleClocks, 1000);
-    setInterval(refreshLive, 10000);
+    setInterval(refreshLive, 30000);
   })();
 })();
 </script>
