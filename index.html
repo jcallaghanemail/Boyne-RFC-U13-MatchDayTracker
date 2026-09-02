@@ -660,7 +660,7 @@ window.boyneAuthReady=new Promise(resolve=>onAuthStateChanged(auth,user=>{
 window.boyneSignIn=async(email,password)=>signInWithEmailAndPassword(auth,email,password);
 window.boyneSignOut=async()=>signOut(auth);
 window.boyneResetPassword=async email=>sendPasswordResetEmail(auth,email);
-window.boyneGetAuthToken=async(forceRefresh=false)=>{await window.boyneAuthReady;return auth.currentUser?auth.currentUser.getIdToken(forceRefresh):null;};
+window.boyneGetAuthToken=async()=>auth.currentUser?auth.currentUser.getIdToken():null;
 const button=document.getElementById('enable-push-btn'),status=document.getElementById('notification-status');
 function state(text,on=false){status.textContent=text;button.classList.toggle('enabled',on);button.textContent=on?'✓ Notifications Enabled':'🔔 Enable Notifications';button.disabled=on;}
 async function setup(){
@@ -704,20 +704,15 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       return await response.json();
     },
     async set(key, value){
-      const send = async (forceRefresh=false) => {
-        const token = window.boyneGetAuthToken ? await window.boyneGetAuthToken(forceRefresh) : null;
-        const headers = { 'Content-Type': 'application/json' };
-        if(token) headers.Authorization = 'Bearer ' + token;
-        return fetch('/api/store', { method:'PUT', headers, body:JSON.stringify({key,value}) });
-      };
-      let response = await send(false);
-      if(response.status === 401 || response.status === 403) response = await send(true);
-      if(!response.ok){
-        let detail = '';
-        try{ const payload=await response.json(); detail=payload.error||JSON.stringify(payload); }
-        catch(e){ try{detail=await response.text();}catch(ignore){} }
-        throw new Error('Store save failed ('+response.status+')'+(detail?': '+detail:''));
-      }
+      const token = window.boyneGetAuthToken ? await window.boyneGetAuthToken() : null;
+      const headers = { 'Content-Type': 'application/json' };
+      if(token){ headers.Authorization = 'Bearer ' + token; headers['X-Boyne-Authorization'] = 'Bearer ' + token; }
+      const response = await fetch('/api/store', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ key, value })
+      });
+      if(!response.ok) throw new Error('Unable to save shared data');
       return true;
     },
     async remove(key){
@@ -774,7 +769,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     showToast._h = setTimeout(()=> t.classList.remove('show'), 2200);
   }
 
-  async function sendPushNotification(kind,title,body,data,audience='all'){try{const token=window.boyneGetAuthToken?await window.boyneGetAuthToken():null;if(!token)throw new Error('Coach login required');const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({kind,title,body,data:data||{},audience})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
+  async function sendPushNotification(kind,title,body,data,audience='all'){try{const token=window.boyneGetAuthToken?await window.boyneGetAuthToken():null;if(!token)throw new Error('Coach login required');const r=await fetch('/api/send-notification',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'X-Boyne-Authorization':'Bearer '+token},body:JSON.stringify({kind,title,body,data:data||{},audience})});if(!r.ok)throw new Error(await r.text());return await r.json();}catch(e){console.error(e);showToast('Saved, but notification could not be sent');return null;}}
   async function safeGet(key, shared){
     try{
       if(!shared) return localStorage.getItem(key);
@@ -796,7 +791,6 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       return true;
     }catch(e){
       console.error('Save failed for:', key, e);
-      window.lastSharedSaveError=e&&e.message?e.message:String(e);
       showToast('Could not save shared data');
       return false;
     }
@@ -1209,7 +1203,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       if(post.pinned) newsPosts.forEach(item=>item.pinned=false);
       newsPosts.push(post);
       const saved=await saveNewsPosts();
-      if(!saved){newsPosts=previous;publish.disabled=false;newsOperationActive=false;showToast(window.lastSharedSaveError||'Post was not saved. Please try again.');renderNews();return;}
+      if(!saved){newsPosts=previous;publish.disabled=false;newsOperationActive=false;showToast('Post was not saved. Please try again.');renderNews();return;}
       await loadNews();
       newsDraftTitle='';newsDraftBody='';localStorage.removeItem('news-draft-title');localStorage.removeItem('news-draft-body');
       await sendPushNotification('news',post.category==='Emergency'?'Important Team Update':post.title,post.body.slice(0,220),{url:'/?portal=parent&tab=news&newsId='+encodeURIComponent(post.id),newsId:post.id},'parent');
