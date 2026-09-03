@@ -93,6 +93,9 @@
   .app-tabs.coach-view .app-tab{flex:1 1 calc(25% - 6px);}
   .app-tab{flex:1; border:1px solid var(--line); background:#fff; color:var(--ink-soft); border-radius:8px; padding:9px 5px; font-family:'Oswald'; font-weight:600; font-size:12px; cursor:pointer;}
   .app-tab.active{background:var(--pitch-deep); color:#fff; border-color:var(--pitch-deep);}
+  .app-tab{position:relative;}
+  .tab-count{display:none;position:absolute;top:-6px;right:-5px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--no);color:#fff;border:2px solid #fff;font-family:'JetBrains Mono';font-size:10px;font-weight:700;line-height:16px;text-align:center;}
+  .tab-count.show{display:block;}
   .app-tab.coach-only{display:none;}
   .app-tabs.coach-view .app-tab.coach-only{display:block;}
   .tab-panel{display:none;}
@@ -992,6 +995,34 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     }catch(e){ return d; }
   }
 
+  function getSeenHistoryIds(){
+    try{return JSON.parse(localStorage.getItem('boyne-seen-history') || '[]');}catch(e){return [];}
+  }
+  function markHistorySeen(eventId){
+    const seen=new Set(getSeenHistoryIds()); seen.add(eventId);
+    localStorage.setItem('boyne-seen-history',JSON.stringify([...seen]));
+  }
+  function setTabCount(tab,count){
+    const button=document.querySelector('.app-tab[data-tab="'+tab+'"]'); if(!button)return;
+    let badge=button.querySelector('.tab-count');
+    if(!badge){badge=document.createElement('span');badge.className='tab-count';badge.setAttribute('aria-label','items requiring attention');button.appendChild(badge);}
+    const value=Math.max(0,Number(count)||0); badge.textContent=value>99?'99+':String(value); badge.classList.toggle('show',value>0);
+  }
+  function updateTabCounts(){
+    const upcoming=events.filter(ev=>!isHistoryEvent(ev)); let fixtureCount=0,pollCount=0;
+    if(role==='parent'){
+      const child=selectedChild;
+      fixtureCount=child?upcoming.filter(ev=>!(rsvpCache[ev.id]&&rsvpCache[ev.id][child])).length:0;
+      pollCount=child?polls.filter(p=>p.open&&!(pollVotes[p.id]&&pollVotes[p.id][child])).length:0;
+    }else{
+      fixtureCount=upcoming.reduce((n,ev)=>n+roster.filter(name=>!(rsvpCache[ev.id]&&rsvpCache[ev.id][name])).length,0);
+      pollCount=polls.filter(p=>p.open).reduce((n,p)=>n+roster.filter(name=>!(pollVotes[p.id]&&pollVotes[p.id][name])).length,0);
+    }
+    const seen=new Set(getSeenHistoryIds());
+    setTabCount('fixtures',fixtureCount); setTabCount('polls',pollCount);
+    setTabCount('history',events.filter(ev=>isHistoryEvent(ev)&&!seen.has(ev.id)).length);
+    setTabCount('news',role==='parent'?newsPosts.filter(post=>!(newsReads[post.id]&&newsReads[post.id][newsDeviceId])).length:0);
+  }
   function newsCategoryLabel(category){
     const allowed = ['General','Training','Fixture','Social','Fundraising','Emergency'];
     const value = String(category || '').trim();
@@ -1186,7 +1217,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       }else{
         const names=receipts.map(item=>item.parentName);
         html+='<div class="news-read-summary"><strong>'+receipts.length+' parent read receipt'+(receipts.length===1?'':'s')+'</strong><div class="news-read"><strong>Read by:</strong> '+(names.length?names.map(escapeHtml).join(', '):'No parent acknowledgements yet')+'</div></div>'+
-          '<div class="news-actions"><button class="news-pin-btn" data-pin-news="'+post.id+'">'+(post.pinned?'Unpin':'Pin')+'</button><button class="news-delete-btn" data-delete-news="'+post.id+'">Delete Post</button></div>';
+          '<div class="news-actions"><button class="news-pin-btn" data-pin-news="'+post.id+'">'+(post.pinned?'Unpin':'Pin')+'</button><button class="news-pin-btn" data-remind-news="'+post.id+'">Send Reminder</button><button class="news-delete-btn" data-delete-news="'+post.id+'">Delete Post</button></div>';
       }
       html+='</article>';
     });
@@ -1232,6 +1263,14 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.querySelectorAll('[data-pin-news]').forEach(btn=>btn.onclick=async()=>{
       if(role!=='coach')return;newsOperationActive=true;const id=btn.getAttribute('data-pin-news'),post=newsPosts.find(item=>item.id===id);if(!post){newsOperationActive=false;return;}
       const next=!post.pinned;newsPosts.forEach(item=>item.pinned=false);post.pinned=next;const saved=await saveNewsPosts();if(saved)await loadNews();newsOperationActive=false;showToast(saved?(next?'Post pinned':'Post unpinned'):'Change was not saved');renderNews();
+    });
+    document.querySelectorAll('[data-remind-news]').forEach(btn=>btn.onclick=async()=>{
+      if(role!=='coach'||btn.disabled)return;
+      const post=newsPosts.find(item=>item.id===btn.getAttribute('data-remind-news')); if(!post)return;
+      if(!confirm('Send a reminder for "'+post.title+'" to subscribed parents?'))return;
+      btn.disabled=true;
+      const sent=await sendPushNotification('news-reminder','Reminder: '+post.title,post.body.slice(0,220),{url:'/?portal=parent&tab=news&newsId='+encodeURIComponent(post.id),newsId:post.id},'parent');
+      btn.disabled=false; if(sent)showToast('News reminder sent');
     });
     document.querySelectorAll('[data-delete-news]').forEach(btn=>btn.onclick=async()=>{
       if(role!=='coach')return;const id=btn.getAttribute('data-delete-news'),post=newsPosts.find(item=>item.id===id);if(!post||!confirm('Delete "'+post.title+'" and its parent read receipts?'))return;
@@ -1388,6 +1427,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     tabs.classList.add('show');
     tabs.classList.toggle('coach-view', role === 'coach');
     document.querySelectorAll('.app-tab').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === activeTab));
+    updateTabCounts();
     document.getElementById('content').style.display = activeTab === 'fixtures' ? 'block' : 'none';
     document.getElementById('dashboard-content').style.display = role === 'coach' && activeTab === 'dashboard' ? 'block' : 'none';
     document.getElementById('selection-content').style.display = role === 'coach' && activeTab === 'selection' ? 'block' : 'none';
@@ -1936,6 +1976,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
           const ev = events.find(e => e.id === id);
           if(!ev) return;
           openEventId = id;
+          if(isHistoryEvent(ev)) markHistorySeen(id);
           showToast(ev.type === 'match' ? 'Loading match report…' : 'Loading attendance…');
           const loads = [loadRsvp(id), loadCoachRsvp(id), loadCheckin(id)];
           if(ev.type === 'match') loads.push(loadScore(id), loadTeam(id), loadMatchNotes(id));
