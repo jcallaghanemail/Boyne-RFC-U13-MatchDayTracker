@@ -1409,13 +1409,26 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
           else showToast('App installation cancelled');
           renderOptions();
         };
-      }else if(isIosDevice()){
-        installCopy.textContent='To install on iPhone or iPad, open this page in Safari, tap Share, then choose Add to Home Screen.';
-        installStatus.textContent='Safari installation instructions';
-      }else{
-        installCopy.textContent='Open the root Boyne RFC U13 page in Chrome, then return to Options when the browser makes installation available.';
-        installStatus.textContent='Install prompt is not currently available';
-      }
+}else if(isIosDevice()){
+  installCopy.innerHTML=`
+    <strong>📱 Install Boyne RFC App</strong><br><br>
+    <strong>iPhone / iPad</strong><br>
+    1. Open this app in Safari<br>
+    2. Tap the Share button (□↑)<br>
+    3. Tap Add to Home Screen<br>
+    4. Tap Add<br><br>
+    The app will then appear on your Home Screen just like a normal app.
+  `;
+  installStatus.textContent='Safari installation instructions';
+}else{
+  installCopy.innerHTML=`
+    <strong>📱 Install Boyne RFC App</strong><br><br>
+    <strong>Android</strong><br>
+    Tap the Install App button below and follow the on-screen instructions.<br><br>
+    The app will then appear on your Home Screen just like a normal app.
+  `;
+  installStatus.textContent='Ready to install when available';
+}
     }
   }
   async function render(){
