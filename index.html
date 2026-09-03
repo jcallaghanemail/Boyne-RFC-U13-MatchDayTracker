@@ -729,6 +729,11 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   };
   const PORTAL_MODE = new URLSearchParams(window.location.search).get('portal');
   const PARENT_ONLY = PORTAL_MODE === 'parent';
+  function setPortalMode(mode){
+    const url = new URL(window.location.href);
+    url.searchParams.set('portal', mode);
+    window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+  }
   let role = 'parent';
   let events = [];
   let rsvpCache = {}; // eventId -> data
@@ -2260,9 +2265,10 @@ This permanently removes this history record and its RSVPs, attendance, score, c
   async function enterCoachArea(){
     const user=window.boyneAuthReady?await window.boyneAuthReady:null;
     if(!user){showCoachLogin();return;}
+    setPortalMode('coach');
     role='coach';activeTab='dashboard';openEventId=null;recordCoachActivity();await render();
   }
-  document.getElementById('role-parent').addEventListener('click', () => { role = 'parent'; if(!['fixtures','history','polls','news','options'].includes(activeTab)) activeTab='fixtures'; render(); });
+  document.getElementById('role-parent').addEventListener('click', () => { setPortalMode('parent'); role = 'parent'; if(!['fixtures','history','polls','news','options'].includes(activeTab)) activeTab='fixtures'; render(); });
   document.getElementById('role-coach').addEventListener('click', () => { if(!PARENT_ONLY) enterCoachArea(); });
   document.getElementById('coach-login-cancel').addEventListener('click',hideCoachLogin);
   loginModal.addEventListener('click',e=>{if(e.target===loginModal)hideCoachLogin();});
@@ -2271,7 +2277,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     const password=document.getElementById('coach-password').value;
     if(!email||!password){loginMessage.textContent='Enter your email address and password.';return;}
     const btn=document.getElementById('coach-login-btn');btn.disabled=true;btn.textContent='Signing In...';loginMessage.textContent='';
-    try{await window.boyneSignIn(email,password);hideCoachLogin();role='coach';activeTab='dashboard';recordCoachActivity();showToast('Coach login successful');await render();}
+    try{await window.boyneSignIn(email,password);setPortalMode('coach');hideCoachLogin();role='coach';activeTab='dashboard';recordCoachActivity();showToast('Coach login successful');await render();}
     catch(error){console.error(error);loginMessage.textContent='Login failed. Check the email address and password.';}
     finally{btn.disabled=false;btn.textContent='Login';}
   });
@@ -2282,7 +2288,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     try{await window.boyneResetPassword(email);loginMessage.style.color='var(--going)';loginMessage.textContent='Password reset email sent.';setTimeout(()=>loginMessage.style.color='',2500);}
     catch(error){console.error(error);loginMessage.textContent='Could not send the password reset email.';}
   });
-  document.getElementById('coach-logout-btn').addEventListener('click',async()=>{clearCoachInactivityTimer();localStorage.removeItem(COACH_ACTIVITY_KEY);await window.boyneSignOut();role='parent';activeTab='fixtures';showToast('Coach logged out');await render();});
+  document.getElementById('coach-logout-btn').addEventListener('click',async()=>{clearCoachInactivityTimer();localStorage.removeItem(COACH_ACTIVITY_KEY);await window.boyneSignOut();setPortalMode('parent');role='parent';activeTab='fixtures';showToast('Coach logged out');await render();});
   window.addEventListener('boyne-auth-changed',async e=>{if(!e.detail.user){clearCoachInactivityTimer();localStorage.removeItem(COACH_ACTIVITY_KEY);if(role==='coach'){role='parent';activeTab='fixtures';await render();}}});
   document.querySelectorAll('.app-tab').forEach(btn => btn.addEventListener('click', () => { activeTab=btn.getAttribute('data-tab'); openEventId=null; render(); }));
 
@@ -2496,9 +2502,12 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     loaded = true;
     await render();
-    if(PORTAL_MODE === 'coach' && !PARENT_ONLY){
-      const user=window.boyneAuthReady?await window.boyneAuthReady:null;
-      if(user){role='coach';activeTab='dashboard';recordCoachActivity();await render();}else showCoachLogin();
+    const signedInCoach=window.boyneAuthReady?await window.boyneAuthReady:null;
+    if(signedInCoach && PORTAL_MODE !== 'parent'){
+      setPortalMode('coach');
+      role='coach';activeTab='dashboard';recordCoachActivity();await render();
+    }else if(PORTAL_MODE === 'coach' && !PARENT_ONLY){
+      showCoachLogin();
     }
     setInterval(updateVisibleClocks, 1000);
     setInterval(refreshLive, 30000);
