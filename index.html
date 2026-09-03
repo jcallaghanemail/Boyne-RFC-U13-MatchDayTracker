@@ -992,6 +992,11 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     }catch(e){ return d; }
   }
 
+  function newsCategoryLabel(category){
+    const allowed = ['General','Training','Fixture','Social','Fundraising','Emergency'];
+    const value = String(category || '').trim();
+    return allowed.includes(value) ? value : 'General';
+  }
   function fmtAdded(iso){
     if(!iso) return '';
     try{
