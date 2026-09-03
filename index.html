@@ -1012,11 +1012,13 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const upcoming=events.filter(ev=>!isHistoryEvent(ev)); let fixtureCount=0,pollCount=0;
     if(role==='parent'){
       const child=selectedChild;
-      fixtureCount=child?upcoming.filter(ev=>!(rsvpCache[ev.id]&&rsvpCache[ev.id][child])).length:0;
-      pollCount=child?polls.filter(p=>p.open&&!(pollVotes[p.id]&&pollVotes[p.id][child])).length:0;
+      // Each badge is the total number of items this player has not answered.
+      fixtureCount=child ? upcoming.filter(ev=>!rsvpCache[ev.id]?.[child]).length : 0;
+      pollCount=child ? polls.filter(p=>p.open&&!pollVotes[p.id]?.[child]).length : 0;
     }else{
-      fixtureCount=upcoming.reduce((n,ev)=>n+roster.filter(name=>!(rsvpCache[ev.id]&&rsvpCache[ev.id][name])).length,0);
-      pollCount=polls.filter(p=>p.open).reduce((n,p)=>n+roster.filter(name=>!(pollVotes[p.id]&&pollVotes[p.id][name])).length,0);
+      // Count items requiring attention, not every individual missing response.
+      fixtureCount=upcoming.filter(ev=>roster.some(name=>!(rsvpCache[ev.id]&&rsvpCache[ev.id][name]))).length;
+      pollCount=polls.filter(p=>p.open&&roster.some(name=>!(pollVotes[p.id]&&pollVotes[p.id][name]))).length;
     }
     const seen=new Set(getSeenHistoryIds());
     setTabCount('fixtures',fixtureCount); setTabCount('polls',pollCount);
@@ -2513,6 +2515,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadCoachRoster();
     await loadPolls();
     await loadNews();
+    await Promise.all(events.filter(e => !isHistoryEvent(e)).map(ev => loadRsvp(ev.id)));
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     if(openEventId){
       const ev = events.find(e => e.id === openEventId);
@@ -2545,6 +2548,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadEvents();
     await loadPolls();
     await loadNews();
+    await Promise.all(events.filter(e => !isHistoryEvent(e)).map(ev => loadRsvp(ev.id)));
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     loaded = true;
     await render();
