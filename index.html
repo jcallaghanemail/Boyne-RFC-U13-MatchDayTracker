@@ -494,6 +494,13 @@
   .drill-name{font-weight:700;font-size:13px;}
   .match-review-checks{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
   .match-review-checks label{font-size:11px;background:#F6F3EA;border:1px solid var(--line);border-radius:14px;padding:6px 8px;}
+  .training-picker{margin-top:10px;padding:10px;background:#EEF5F0;border:1px solid #B8D0C0;border-radius:9px;}
+  .training-picker-row{display:flex;gap:7px;align-items:center;}
+  .training-picker-row select{flex:1;min-width:0;padding:9px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:12px;}
+  .template-grid{display:grid;gap:8px;margin-top:8px;}
+  .template-card{padding:10px;background:#F6F3EA;border:1px solid var(--line);border-radius:9px;}
+  #training-print-sheet{display:none;}
+  @media print{body *{visibility:hidden!important;}#training-print-sheet,#training-print-sheet *{visibility:visible!important;}#training-print-sheet{display:block!important;position:absolute;inset:0;background:#fff;color:#111;padding:28px;font-family:Arial,sans-serif;}#training-print-sheet h1{font-size:24px;margin:0 0 4px;}#training-print-sheet h2{font-size:16px;margin:20px 0 8px;}#training-print-sheet .print-meta{font-size:12px;margin-bottom:14px;}#training-print-sheet .print-row{display:grid;grid-template-columns:70px 1fr;gap:12px;border-top:1px solid #ccc;padding:10px 0;font-size:12px;}#training-print-sheet .print-time{font-weight:700;}@page{size:A4;margin:16mm;}}
   .coach-login-overlay{display:none;position:fixed;inset:0;background:rgba(8,20,15,.82);z-index:9999;padding:20px;align-items:flex-start;justify-content:center;overflow:auto;}
   .coach-login-overlay.open{display:flex;}
   .coach-login-card{width:100%;max-width:390px;margin-top:54px;background:var(--card);border-radius:14px;padding:22px;border:1px solid rgba(255,255,255,.25);box-shadow:0 18px 55px rgba(0,0,0,.35);}
@@ -646,6 +653,7 @@
   <div class="selection-page" id="selection-content" style="display:none;"></div>
   <div class="stats-page" id="stats-content" style="display:none;"></div>
   <div class="training-planner-page" id="training-planner-content" style="display:none;"></div>
+  <div id="training-print-sheet" aria-hidden="true"></div>
   <div class="history-page" id="history-content" style="display:none;"></div>
   <div class="polls-page" id="polls-content" style="display:none;"></div>
   <div class="news-page" id="news-content" style="display:none;"></div>
@@ -789,6 +797,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let trainingPlans = [];
   let drillLibrary = [];
   let matchReviews = [];
+  let trainingTemplates = [];
   let trainingView = 'plans';
   let editingTrainingPlanId = null;
   let teamCache = {};
@@ -873,17 +882,20 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   async function saveNewsReads(){return await safeSet('news-reads',JSON.stringify(newsReads),true);}
 
   async function loadTrainingTools(){
-    const plans=await safeGet('training-plans',true),drills=await safeGet('drill-library',true),reviews=await safeGet('match-reviews',true);
+    const plans=await safeGet('training-plans',true),drills=await safeGet('drill-library',true),reviews=await safeGet('match-reviews',true),templates=await safeGet('training-templates',true);
     try{trainingPlans=plans?JSON.parse(plans):[];}catch(e){trainingPlans=[];}
     try{drillLibrary=drills?JSON.parse(drills):[];}catch(e){drillLibrary=[];}
     try{matchReviews=reviews?JSON.parse(reviews):[];}catch(e){matchReviews=[];}
+    try{trainingTemplates=templates?JSON.parse(templates):[];}catch(e){trainingTemplates=[];}
     if(!Array.isArray(trainingPlans))trainingPlans=[];
     if(!Array.isArray(drillLibrary))drillLibrary=[];
     if(!Array.isArray(matchReviews))matchReviews=[];
+    if(!Array.isArray(trainingTemplates))trainingTemplates=[];
   }
   async function saveTrainingPlans(){return await safeSet('training-plans',JSON.stringify(trainingPlans),true);}
   async function saveDrillLibrary(){return await safeSet('drill-library',JSON.stringify(drillLibrary),true);}
   async function saveMatchReviews(){return await safeSet('match-reviews',JSON.stringify(matchReviews),true);}
+  async function saveTrainingTemplates(){return await safeSet('training-templates',JSON.stringify(trainingTemplates),true);}
   async function loadRoster(){
     const v = await safeGet('roster', true);
     roster = v ? JSON.parse(v) : [];
@@ -1419,7 +1431,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       '<div class="training-field"><label>Planned duration</label><input id="tp-duration" type="number" min="1" value="'+Number(plan.duration||90)+'"></div>'+
       '<div class="training-field full"><label>Session objective</label><textarea id="tp-objective" placeholder="What should players learn or improve?">'+escapeHtml(plan.objective||'')+'</textarea></div></div>'+
       '<div class="training-card-title" style="font-size:13px;margin-top:12px;">Session Blocks</div><div id="tp-blocks">'+blocks.map((b,i)=>sessionBlockHtml(b,i)).join('')+'</div>'+
-      '<div class="training-actions"><button class="training-secondary" id="tp-add-block">+ Add Block</button><button class="primary-btn" id="tp-save">'+(plan.id?'Update Session':'Save Session')+'</button>'+(plan.id?'<button class="training-secondary" id="tp-cancel">Cancel</button>':'')+'</div></div>';
+      '<div class="training-picker"><div class="training-meta" style="margin-bottom:6px;"><strong>Add from Drill Library</strong></div><div class="training-picker-row"><select id="tp-drill-picker"><option value="">Choose a saved drill</option>'+drillLibrary.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(d=>'<option value="'+escapeAttr(d.id)+'">'+escapeHtml(d.name)+' · '+Number(d.duration||0)+' mins</option>').join('')+'</select><button class="training-secondary" id="tp-add-drill" type="button">Add Drill</button></div></div>'+
+      '<div class="training-actions"><button class="training-secondary" id="tp-add-block" type="button">+ Add Block</button><button class="primary-btn" id="tp-save" type="button">'+(plan.id?'Update Session':'Save Session')+'</button>'+(plan.id?'<button class="training-secondary" id="tp-cancel" type="button">Cancel</button>':'')+'</div></div>';
   }
   function sessionBlockHtml(block,index){return '<div class="session-block" data-block-index="'+index+'"><input class="tp-block-title" value="'+escapeAttr(block.title||'')+'" placeholder="Block / drill name"><input class="tp-block-duration" type="number" min="1" value="'+Number(block.duration||15)+'" aria-label="Minutes"><textarea class="tp-block-notes" placeholder="Coaching points or setup notes">'+escapeHtml(block.notes||'')+'</textarea><button class="remove-block" type="button" aria-label="Remove block">×</button></div>';}
   function readTrainingBlocks(){return [...document.querySelectorAll('#tp-blocks .session-block')].map(row=>({title:row.querySelector('.tp-block-title').value.trim(),duration:Math.max(1,Number(row.querySelector('.tp-block-duration').value)||1),notes:row.querySelector('.tp-block-notes').value.trim()})).filter(b=>b.title);}
@@ -1430,7 +1443,8 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     if(trainingView==='plans'){
       const edit=trainingPlans.find(x=>x.id===editingTrainingPlanId); html+=trainingPlanFormHtml(edit);
       const ordered=trainingPlans.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-      html+='<div class="training-card"><div class="training-card-title">Session Library</div>'+(ordered.length?ordered.map(p=>'<div class="drill-card"><div class="drill-row"><div><div class="drill-name">'+escapeHtml(p.name)+'</div><div class="training-meta">'+escapeHtml(fmtDate(p.date,''))+' · '+escapeHtml(p.theme||'')+' · '+(p.blocks||[]).reduce((n,b)=>n+(Number(b.duration)||0),0)+' mins</div></div></div>'+planTimelineHtml(p)+'<div class="training-actions"><button class="training-secondary" data-edit-plan="'+p.id+'">Edit</button><button class="training-secondary" data-copy-plan="'+p.id+'">Duplicate</button><button class="training-danger" data-delete-plan="'+p.id+'">Delete</button></div></div>').join(''):'<div class="training-meta">No session plans saved yet.</div>')+'</div>';
+      html+='<div class="training-card"><div class="training-card-title">Session Templates</div><div class="training-meta">Save a completed plan as a reusable template, then use it for a future session.</div><div class="template-grid">'+(trainingTemplates.length?trainingTemplates.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(t=>'<div class="template-card"><div class="drill-name">'+escapeHtml(t.name)+'</div><div class="training-meta">'+escapeHtml(t.theme||'')+' · '+(t.blocks||[]).reduce((n,b)=>n+(Number(b.duration)||0),0)+' mins</div><div class="training-actions"><button class="training-secondary" data-use-template="'+t.id+'">Use Template</button><button class="training-danger" data-delete-template="'+t.id+'">Delete</button></div></div>').join(''):'<div class="training-meta">No templates saved yet.</div>')+'</div></div>';
+      html+='<div class="training-card"><div class="training-card-title">Session Library</div>'+(ordered.length?ordered.map(p=>'<div class="drill-card"><div class="drill-row"><div><div class="drill-name">'+escapeHtml(p.name)+'</div><div class="training-meta">'+escapeHtml(fmtDate(p.date,''))+' · '+escapeHtml(p.theme||'')+' · '+(p.blocks||[]).reduce((n,b)=>n+(Number(b.duration)||0),0)+' mins</div></div></div>'+planTimelineHtml(p)+'<div class="training-actions"><button class="training-secondary" data-edit-plan="'+p.id+'">Edit</button><button class="training-secondary" data-copy-plan="'+p.id+'">Duplicate</button><button class="training-secondary" data-save-template="'+p.id+'">Save as Template</button><button class="training-secondary" data-export-plan="'+p.id+'">Export PDF</button><button class="training-danger" data-delete-plan="'+p.id+'">Delete</button></div></div>').join(''):'<div class="training-meta">No session plans saved yet.</div>')+'</div>';
     }else if(trainingView==='drills'){
       html+='<div class="training-card"><div class="training-card-title">Add Drill</div><div class="training-form-grid"><div class="training-field full"><label>Drill name</label><input id="drill-name"></div><div class="training-field"><label>Category</label><select id="drill-category">'+TRAINING_THEMES.map(x=>'<option>'+x+'</option>').join('')+'</select></div><div class="training-field"><label>Duration</label><input id="drill-duration" type="number" min="1" value="15"></div><div class="training-field full"><label>Objective</label><textarea id="drill-objective"></textarea></div><div class="training-field full"><label>Instructions / coaching points</label><textarea id="drill-notes"></textarea></div></div><div class="training-actions"><button class="primary-btn" id="save-drill">Save Drill</button></div></div>';
       html+='<div class="training-card"><div class="training-card-title">Drill Library</div>'+(drillLibrary.length?drillLibrary.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(d=>'<div class="drill-card"><span class="training-pill">'+escapeHtml(d.category)+'</span><div class="drill-name">'+escapeHtml(d.name)+'</div><div class="training-meta">'+Number(d.duration||0)+' mins'+(d.objective?' · '+escapeHtml(d.objective):'')+'</div>'+(d.notes?'<div class="training-meta" style="margin-top:5px;">'+escapeHtml(d.notes)+'</div>':'')+'<div class="training-actions"><button class="training-secondary" data-add-drill-plan="'+d.id+'">Add to New Plan</button><button class="training-danger" data-delete-drill="'+d.id+'">Delete</button></div></div>').join(''):'<div class="training-meta">No drills saved yet.</div>')+'</div>';
@@ -1441,15 +1455,35 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     }
     el.innerHTML=html; attachTrainingHandlers();
   }
+  function exportTrainingPlanPdf(plan){
+    const sheet=document.getElementById('training-print-sheet');
+    let elapsed=0;
+    sheet.innerHTML='<h1>Boyne RFC U13 Training Plan</h1><div class="print-meta"><strong>'+escapeHtml(plan.name)+'</strong><br>'+escapeHtml(fmtDate(plan.date,''))+' · '+escapeHtml(plan.theme||'')+' · '+(plan.blocks||[]).reduce((n,b)=>n+(Number(b.duration)||0),0)+' minutes</div>'+(plan.objective?'<h2>Session Objective</h2><div class="print-meta">'+escapeHtml(plan.objective)+'</div>':'')+'<h2>Session Timeline</h2>'+(plan.blocks||[]).map(b=>{const start=elapsed;elapsed+=Number(b.duration)||0;return '<div class="print-row"><div class="print-time">'+start+'-'+elapsed+' mins</div><div><strong>'+escapeHtml(b.title)+'</strong>'+(b.notes?'<br>'+escapeHtml(b.notes):'')+'</div></div>';}).join('');
+    document.title='Boyne RFC U13 - '+plan.name;
+    window.print();
+    setTimeout(()=>{document.title='Pitchside — Rugby Matchday Tracker';sheet.innerHTML='';},500);
+  }
+  function appendTrainingBlock(block){
+    const wrap=document.getElementById('tp-blocks');if(!wrap)return;
+    const holder=document.createElement('div');holder.innerHTML=sessionBlockHtml(block||blankSessionBlock(),wrap.children.length);
+    const row=holder.firstElementChild;wrap.appendChild(row);
+    const remove=row.querySelector('.remove-block');if(remove)remove.onclick=(event)=>{event.preventDefault();row.remove();};
+    const title=row.querySelector('.tp-block-title');if(title)title.focus();
+  }
   function attachTrainingHandlers(){
     document.querySelectorAll('[data-training-view]').forEach(b=>b.onclick=()=>{trainingView=b.getAttribute('data-training-view');editingTrainingPlanId=null;renderTrainingPlanner();});
-    const add=document.getElementById('tp-add-block');if(add)add.onclick=(event)=>{event.preventDefault();const wrap=document.getElementById('tp-blocks');if(!wrap)return;const holder=document.createElement('div');holder.innerHTML=sessionBlockHtml(blankSessionBlock(),wrap.children.length);const row=holder.firstElementChild;wrap.appendChild(row);const remove=row.querySelector('.remove-block');if(remove)remove.onclick=(removeEvent)=>{removeEvent.preventDefault();row.remove();};const title=row.querySelector('.tp-block-title');if(title)title.focus();};
+    const add=document.getElementById('tp-add-block');if(add)add.onclick=(event)=>{event.preventDefault();appendTrainingBlock(blankSessionBlock());};
+    const addDrill=document.getElementById('tp-add-drill');if(addDrill)addDrill.onclick=(event)=>{event.preventDefault();const id=document.getElementById('tp-drill-picker').value;const drill=drillLibrary.find(x=>x.id===id);if(!drill){showToast('Choose a drill first');return;}appendTrainingBlock({title:drill.name,duration:drill.duration,notes:drill.notes||drill.objective||''});showToast('Drill added to session');};
     document.querySelectorAll('.remove-block').forEach(b=>b.onclick=()=>b.closest('.session-block').remove());
     const save=document.getElementById('tp-save');if(save)save.onclick=async()=>{const name=document.getElementById('tp-name').value.trim(),date=document.getElementById('tp-date').value,blocks=readTrainingBlocks();if(!name||!date){showToast('Add a session name and date');return;}if(!blocks.length){showToast('Add at least one session block');return;}const existing=trainingPlans.find(x=>x.id===editingTrainingPlanId);const value={id:existing?existing.id:uid(),name,date,theme:document.getElementById('tp-theme').value,duration:Number(document.getElementById('tp-duration').value)||90,objective:document.getElementById('tp-objective').value.trim(),blocks,createdAt:existing?existing.createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};if(existing)trainingPlans[trainingPlans.indexOf(existing)]=value;else trainingPlans.push(value);if(await saveTrainingPlans()){editingTrainingPlanId=null;showToast('Training session saved');renderTrainingPlanner();}};
     const cancel=document.getElementById('tp-cancel');if(cancel)cancel.onclick=()=>{editingTrainingPlanId=null;renderTrainingPlanner();};
     document.querySelectorAll('[data-edit-plan]').forEach(b=>b.onclick=()=>{editingTrainingPlanId=b.getAttribute('data-edit-plan');window.scrollTo(0,0);renderTrainingPlanner();});
     document.querySelectorAll('[data-copy-plan]').forEach(b=>b.onclick=async()=>{const p=trainingPlans.find(x=>x.id===b.getAttribute('data-copy-plan'));if(!p)return;trainingPlans.push({...JSON.parse(JSON.stringify(p)),id:uid(),name:p.name+' Copy',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});await saveTrainingPlans();renderTrainingPlanner();});
     document.querySelectorAll('[data-delete-plan]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this training plan?'))return;trainingPlans=trainingPlans.filter(x=>x.id!==b.getAttribute('data-delete-plan'));await saveTrainingPlans();renderTrainingPlanner();});
+    document.querySelectorAll('[data-save-template]').forEach(b=>b.onclick=async()=>{const p=trainingPlans.find(x=>x.id===b.getAttribute('data-save-template'));if(!p)return;const name=prompt('Template name',p.name);if(!name)return;trainingTemplates.push({id:uid(),name:name.trim(),theme:p.theme,duration:p.duration,objective:p.objective,blocks:JSON.parse(JSON.stringify(p.blocks||[])),createdAt:new Date().toISOString()});await saveTrainingTemplates();showToast('Template saved');renderTrainingPlanner();});
+    document.querySelectorAll('[data-use-template]').forEach(b=>b.onclick=()=>{const t=trainingTemplates.find(x=>x.id===b.getAttribute('data-use-template'));if(!t)return;editingTrainingPlanId=null;const name=document.getElementById('tp-name'),date=document.getElementById('tp-date'),theme=document.getElementById('tp-theme'),duration=document.getElementById('tp-duration'),objective=document.getElementById('tp-objective'),blocks=document.getElementById('tp-blocks');name.value=t.name;date.value='';theme.value=t.theme||'Defence';duration.value=t.duration||90;objective.value=t.objective||'';blocks.innerHTML=(t.blocks||[]).map((x,i)=>sessionBlockHtml(x,i)).join('');document.querySelectorAll('.remove-block').forEach(btn=>btn.onclick=e=>{e.preventDefault();btn.closest('.session-block').remove();});window.scrollTo({top:0,behavior:'smooth'});showToast('Template loaded');});
+    document.querySelectorAll('[data-delete-template]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this template?'))return;trainingTemplates=trainingTemplates.filter(x=>x.id!==b.getAttribute('data-delete-template'));await saveTrainingTemplates();renderTrainingPlanner();});
+    document.querySelectorAll('[data-export-plan]').forEach(b=>b.onclick=()=>{const p=trainingPlans.find(x=>x.id===b.getAttribute('data-export-plan'));if(p)exportTrainingPlanPdf(p);});
     const sd=document.getElementById('save-drill');if(sd)sd.onclick=async()=>{const name=document.getElementById('drill-name').value.trim();if(!name){showToast('Add a drill name');return;}drillLibrary.push({id:uid(),name,category:document.getElementById('drill-category').value,duration:Number(document.getElementById('drill-duration').value)||15,objective:document.getElementById('drill-objective').value.trim(),notes:document.getElementById('drill-notes').value.trim(),createdAt:new Date().toISOString()});await saveDrillLibrary();showToast('Drill saved');renderTrainingPlanner();};
     document.querySelectorAll('[data-add-drill-plan]').forEach(b=>b.onclick=()=>{const d=drillLibrary.find(x=>x.id===b.getAttribute('data-add-drill-plan'));if(!d)return;const draft={id:null,name:'',date:'',theme:d.category,duration:90,objective:d.objective,blocks:[{title:d.name,duration:d.duration,notes:d.notes}]};editingTrainingPlanId=null;trainingView='plans';renderTrainingPlanner();const n=document.getElementById('tp-name');document.getElementById('tp-theme').value=d.category;document.getElementById('tp-objective').value=d.objective||'';document.getElementById('tp-blocks').innerHTML=sessionBlockHtml(draft.blocks[0],0);if(n)n.focus();attachTrainingHandlers();});
     document.querySelectorAll('[data-delete-drill]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this drill?'))return;drillLibrary=drillLibrary.filter(x=>x.id!==b.getAttribute('data-delete-drill'));await saveDrillLibrary();renderTrainingPlanner();});
