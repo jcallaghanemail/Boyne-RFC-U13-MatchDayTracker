@@ -463,6 +463,37 @@
 
   .loading-row{padding:24px; text-align:center; color:var(--ink-soft); font-size:13px;}
   .notification-row{margin-top:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.notification-btn{border:1px solid rgba(255,255,255,.55);background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:8px 11px;font-family:'Oswald';font-size:12px;font-weight:600;cursor:pointer}.notification-btn.enabled{background:var(--going)}.notification-status{font-size:10.5px;color:#fff;opacity:.85}
+
+  /* Coach training planner */
+  .training-planner-page{padding:16px;}
+  .training-tabs{display:flex;gap:6px;margin-bottom:12px;}
+  .training-tabs button{flex:1;border:1px solid var(--line);background:#fff;color:var(--ink-soft);border-radius:8px;padding:9px 5px;font-family:'Oswald';font-weight:700;cursor:pointer;}
+  .training-tabs button.active{background:var(--pitch-deep);color:#fff;border-color:var(--pitch-deep);}
+  .training-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
+  .training-card-title{font-family:'Oswald';font-size:16px;font-weight:700;color:var(--pitch-deep);margin-bottom:8px;}
+  .training-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .training-form-grid .full{grid-column:1/-1;}
+  .training-field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);margin-bottom:4px;}
+  .training-field input,.training-field select,.training-field textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:12px;}
+  .training-field textarea{min-height:76px;resize:vertical;}
+  .session-block{display:grid;grid-template-columns:1fr 72px 34px;gap:6px;margin-top:8px;align-items:start;}
+  .session-block input,.session-block textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:11px;}
+  .session-block textarea{grid-column:1/3;min-height:56px;resize:vertical;}
+  .session-block .remove-block{grid-column:3;grid-row:1/3;border:1px solid var(--no);background:#fff;color:var(--no);border-radius:7px;height:34px;font-weight:700;cursor:pointer;}
+  .training-actions{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;}
+  .training-actions button{flex:1;min-width:105px;border-radius:8px;padding:9px;font-family:'Oswald';font-weight:700;cursor:pointer;}
+  .training-secondary{border:1px solid var(--pitch-mid);background:#fff;color:var(--pitch-mid);}
+  .training-danger{border:1px solid var(--no);background:#fff;color:var(--no);}
+  .training-meta{font-size:11px;color:var(--ink-soft);line-height:1.45;}
+  .training-timeline{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;}
+  .training-timeline-row{display:grid;grid-template-columns:52px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:11.5px;}
+  .training-minutes{font-family:'JetBrains Mono';font-weight:700;color:var(--mud-dark);}
+  .training-pill{display:inline-block;padding:4px 7px;border-radius:10px;background:var(--going-bg);color:var(--going);font-size:10px;font-weight:700;margin-right:4px;}
+  .drill-card{background:#F6F3EA;border:1px solid var(--line);border-radius:9px;padding:10px;margin-top:8px;}
+  .drill-row{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;}
+  .drill-name{font-weight:700;font-size:13px;}
+  .match-review-checks{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;}
+  .match-review-checks label{font-size:11px;background:#F6F3EA;border:1px solid var(--line);border-radius:14px;padding:6px 8px;}
   .coach-login-overlay{display:none;position:fixed;inset:0;background:rgba(8,20,15,.82);z-index:9999;padding:20px;align-items:flex-start;justify-content:center;overflow:auto;}
   .coach-login-overlay.open{display:flex;}
   .coach-login-card{width:100%;max-width:390px;margin-top:54px;background:var(--card);border-radius:14px;padding:22px;border:1px solid rgba(255,255,255,.25);box-shadow:0 18px 55px rgba(0,0,0,.35);}
@@ -520,6 +551,7 @@
     <button class="app-tab coach-only" data-tab="squad">Squad</button>
     <button class="app-tab coach-only" data-tab="selection">Selection</button>
     <button class="app-tab coach-only" data-tab="stats">Stats</button>
+    <button class="app-tab coach-only" data-tab="training-planner">Training</button>
     <button class="app-tab" data-tab="history">History</button>
     <button class="app-tab" data-tab="polls">Polls</button>
     <button class="app-tab" data-tab="news">News</button>
@@ -613,6 +645,7 @@
   <div class="dashboard-page" id="dashboard-content" style="display:none;"></div>
   <div class="selection-page" id="selection-content" style="display:none;"></div>
   <div class="stats-page" id="stats-content" style="display:none;"></div>
+  <div class="training-planner-page" id="training-planner-content" style="display:none;"></div>
   <div class="history-page" id="history-content" style="display:none;"></div>
   <div class="polls-page" id="polls-content" style="display:none;"></div>
   <div class="news-page" id="news-content" style="display:none;"></div>
@@ -753,6 +786,11 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   let selectionEventId = null;
   let selectedStatsPlayer = '';
   let selectedPitchSlot = null;
+  let trainingPlans = [];
+  let drillLibrary = [];
+  let matchReviews = [];
+  let trainingView = 'plans';
+  let editingTrainingPlanId = null;
   let teamCache = {};
   let checkinCache = {}; // eventId -> { playerName: {checkedIn, updatedAt} }
   let matchNotesCache = {}; // eventId -> coach match notes
@@ -833,6 +871,19 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   async function loadNews(){const p=await safeGet('news-posts',true),r=await safeGet('news-reads',true);try{newsPosts=p?JSON.parse(p):[]}catch(e){newsPosts=[]}try{newsReads=r?JSON.parse(r):{}}catch(e){newsReads={}}if(!Array.isArray(newsPosts))newsPosts=[];if(!newsReads||typeof newsReads!=='object')newsReads={};}
   async function saveNewsPosts(){return await safeSet('news-posts',JSON.stringify(newsPosts),true);}
   async function saveNewsReads(){return await safeSet('news-reads',JSON.stringify(newsReads),true);}
+
+  async function loadTrainingTools(){
+    const plans=await safeGet('training-plans',true),drills=await safeGet('drill-library',true),reviews=await safeGet('match-reviews',true);
+    try{trainingPlans=plans?JSON.parse(plans):[];}catch(e){trainingPlans=[];}
+    try{drillLibrary=drills?JSON.parse(drills):[];}catch(e){drillLibrary=[];}
+    try{matchReviews=reviews?JSON.parse(reviews):[];}catch(e){matchReviews=[];}
+    if(!Array.isArray(trainingPlans))trainingPlans=[];
+    if(!Array.isArray(drillLibrary))drillLibrary=[];
+    if(!Array.isArray(matchReviews))matchReviews=[];
+  }
+  async function saveTrainingPlans(){return await safeSet('training-plans',JSON.stringify(trainingPlans),true);}
+  async function saveDrillLibrary(){return await safeSet('drill-library',JSON.stringify(drillLibrary),true);}
+  async function saveMatchReviews(){return await safeSet('match-reviews',JSON.stringify(matchReviews),true);}
   async function loadRoster(){
     const v = await safeGet('roster', true);
     roster = v ? JSON.parse(v) : [];
@@ -1355,6 +1406,56 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     el.innerHTML=html;
     const select=document.getElementById('stats-player');if(select)select.onchange=async()=>{selectedStatsPlayer=select.value;await renderStats();};
   }
+
+  const TRAINING_THEMES=['Attack','Defence','Contact','Handling','Kicking','Fitness','Games','Set Piece','Breakdown'];
+  function blankSessionBlock(){return {title:'',duration:15,notes:''};}
+  function trainingPlanFormHtml(plan){
+    plan=plan||{name:'',date:'',theme:'Defence',duration:90,objective:'',blocks:[blankSessionBlock()]};
+    const blocks=(plan.blocks&&plan.blocks.length?plan.blocks:[blankSessionBlock()]);
+    return '<div class="training-card"><div class="training-card-title">'+(plan.id?'Edit Session':'Create Training Session')+'</div><div class="training-form-grid">'+
+      '<div class="training-field full"><label>Session name</label><input id="tp-name" value="'+escapeAttr(plan.name||'')+'" placeholder="e.g. Tuesday Defence Session"></div>'+
+      '<div class="training-field"><label>Date</label><input id="tp-date" type="date" value="'+escapeAttr(plan.date||'')+'"></div>'+
+      '<div class="training-field"><label>Theme</label><select id="tp-theme">'+TRAINING_THEMES.map(x=>'<option '+(x===plan.theme?'selected':'')+'>'+x+'</option>').join('')+'</select></div>'+
+      '<div class="training-field"><label>Planned duration</label><input id="tp-duration" type="number" min="1" value="'+Number(plan.duration||90)+'"></div>'+
+      '<div class="training-field full"><label>Session objective</label><textarea id="tp-objective" placeholder="What should players learn or improve?">'+escapeHtml(plan.objective||'')+'</textarea></div></div>'+
+      '<div class="training-card-title" style="font-size:13px;margin-top:12px;">Session Blocks</div><div id="tp-blocks">'+blocks.map((b,i)=>sessionBlockHtml(b,i)).join('')+'</div>'+
+      '<div class="training-actions"><button class="training-secondary" id="tp-add-block">+ Add Block</button><button class="primary-btn" id="tp-save">'+(plan.id?'Update Session':'Save Session')+'</button>'+(plan.id?'<button class="training-secondary" id="tp-cancel">Cancel</button>':'')+'</div></div>';
+  }
+  function sessionBlockHtml(block,index){return '<div class="session-block" data-block-index="'+index+'"><input class="tp-block-title" value="'+escapeAttr(block.title||'')+'" placeholder="Block / drill name"><input class="tp-block-duration" type="number" min="1" value="'+Number(block.duration||15)+'" aria-label="Minutes"><textarea class="tp-block-notes" placeholder="Coaching points or setup notes">'+escapeHtml(block.notes||'')+'</textarea><button class="remove-block" type="button" aria-label="Remove block">×</button></div>';}
+  function readTrainingBlocks(){return [...document.querySelectorAll('#tp-blocks .session-block')].map(row=>({title:row.querySelector('.tp-block-title').value.trim(),duration:Math.max(1,Number(row.querySelector('.tp-block-duration').value)||1),notes:row.querySelector('.tp-block-notes').value.trim()})).filter(b=>b.title);}
+  function planTimelineHtml(plan){let elapsed=0;return '<div class="training-timeline">'+(plan.blocks||[]).map(b=>{const start=elapsed;elapsed+=Number(b.duration)||0;return '<div class="training-timeline-row"><div class="training-minutes">'+start+'-'+elapsed+'m</div><div><strong>'+escapeHtml(b.title)+'</strong>'+(b.notes?'<br><span class="training-meta">'+escapeHtml(b.notes)+'</span>':'')+'</div></div>';}).join('')+'</div>';}
+  function renderTrainingPlanner(){
+    const el=document.getElementById('training-planner-content'); if(!el||role!=='coach')return;
+    let html='<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Coach Training Tools</div><div class="training-tabs"><button data-training-view="plans" class="'+(trainingView==='plans'?'active':'')+'">Plans</button><button data-training-view="drills" class="'+(trainingView==='drills'?'active':'')+'">Drills</button><button data-training-view="reviews" class="'+(trainingView==='reviews'?'active':'')+'">Match Review</button></div>';
+    if(trainingView==='plans'){
+      const edit=trainingPlans.find(x=>x.id===editingTrainingPlanId); html+=trainingPlanFormHtml(edit);
+      const ordered=trainingPlans.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      html+='<div class="training-card"><div class="training-card-title">Session Library</div>'+(ordered.length?ordered.map(p=>'<div class="drill-card"><div class="drill-row"><div><div class="drill-name">'+escapeHtml(p.name)+'</div><div class="training-meta">'+escapeHtml(fmtDate(p.date,''))+' · '+escapeHtml(p.theme||'')+' · '+(p.blocks||[]).reduce((n,b)=>n+(Number(b.duration)||0),0)+' mins</div></div></div>'+planTimelineHtml(p)+'<div class="training-actions"><button class="training-secondary" data-edit-plan="'+p.id+'">Edit</button><button class="training-secondary" data-copy-plan="'+p.id+'">Duplicate</button><button class="training-danger" data-delete-plan="'+p.id+'">Delete</button></div></div>').join(''):'<div class="training-meta">No session plans saved yet.</div>')+'</div>';
+    }else if(trainingView==='drills'){
+      html+='<div class="training-card"><div class="training-card-title">Add Drill</div><div class="training-form-grid"><div class="training-field full"><label>Drill name</label><input id="drill-name"></div><div class="training-field"><label>Category</label><select id="drill-category">'+TRAINING_THEMES.map(x=>'<option>'+x+'</option>').join('')+'</select></div><div class="training-field"><label>Duration</label><input id="drill-duration" type="number" min="1" value="15"></div><div class="training-field full"><label>Objective</label><textarea id="drill-objective"></textarea></div><div class="training-field full"><label>Instructions / coaching points</label><textarea id="drill-notes"></textarea></div></div><div class="training-actions"><button class="primary-btn" id="save-drill">Save Drill</button></div></div>';
+      html+='<div class="training-card"><div class="training-card-title">Drill Library</div>'+(drillLibrary.length?drillLibrary.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(d=>'<div class="drill-card"><span class="training-pill">'+escapeHtml(d.category)+'</span><div class="drill-name">'+escapeHtml(d.name)+'</div><div class="training-meta">'+Number(d.duration||0)+' mins'+(d.objective?' · '+escapeHtml(d.objective):'')+'</div>'+(d.notes?'<div class="training-meta" style="margin-top:5px;">'+escapeHtml(d.notes)+'</div>':'')+'<div class="training-actions"><button class="training-secondary" data-add-drill-plan="'+d.id+'">Add to New Plan</button><button class="training-danger" data-delete-drill="'+d.id+'">Delete</button></div></div>').join(''):'<div class="training-meta">No drills saved yet.</div>')+'</div>';
+    }else{
+      const matches=events.filter(ev=>ev.type==='match');
+      html+='<div class="training-card"><div class="training-card-title">Match Review Notes</div><div class="training-field"><label>Match</label><select id="review-match"><option value="">Choose match</option>'+matches.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(m=>'<option value="'+escapeAttr(m.id)+'">'+escapeHtml(m.title)+' · '+escapeHtml(fmtDate(m.date,m.time))+'</option>').join('')+'</select></div><div class="training-field" style="margin-top:8px;"><label>Worked well</label><textarea id="review-good"></textarea></div><div class="training-field" style="margin-top:8px;"><label>Needs improvement</label><textarea id="review-improve"></textarea></div><div class="training-field" style="margin-top:8px;"><label>Key notes</label><textarea id="review-notes"></textarea></div><div class="training-actions"><button class="primary-btn" id="save-review">Save Review</button></div></div>';
+      html+='<div class="training-card"><div class="training-card-title">Review Journal</div>'+(matchReviews.length?matchReviews.slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||'')).map(r=>{const m=events.find(x=>x.id===r.eventId);return '<div class="drill-card"><div class="drill-name">'+escapeHtml(m?m.title:'Match review')+'</div><div class="training-meta">'+escapeHtml(fmtAdded(r.createdAt))+'</div>'+(r.good?'<p class="training-meta"><strong>Worked well:</strong> '+escapeHtml(r.good)+'</p>':'')+(r.improve?'<p class="training-meta"><strong>Needs improvement:</strong> '+escapeHtml(r.improve)+'</p>':'')+(r.notes?'<p class="training-meta"><strong>Notes:</strong> '+escapeHtml(r.notes)+'</p>':'')+'<div class="training-actions"><button class="training-danger" data-delete-review="'+r.id+'">Delete</button></div></div>';}).join(''):'<div class="training-meta">No match reviews saved yet.</div>')+'</div>';
+    }
+    el.innerHTML=html; attachTrainingHandlers();
+  }
+  function attachTrainingHandlers(){
+    document.querySelectorAll('[data-training-view]').forEach(b=>b.onclick=()=>{trainingView=b.getAttribute('data-training-view');editingTrainingPlanId=null;renderTrainingPlanner();});
+    const add=document.getElementById('tp-add-block');if(add)add.onclick=()=>{const wrap=document.getElementById('tp-blocks');wrap.insertAdjacentHTML('beforeend',sessionBlockHtml(blankSessionBlock(),wrap.children.length));attachTrainingHandlers();};
+    document.querySelectorAll('.remove-block').forEach(b=>b.onclick=()=>b.closest('.session-block').remove());
+    const save=document.getElementById('tp-save');if(save)save.onclick=async()=>{const name=document.getElementById('tp-name').value.trim(),date=document.getElementById('tp-date').value,blocks=readTrainingBlocks();if(!name||!date){showToast('Add a session name and date');return;}if(!blocks.length){showToast('Add at least one session block');return;}const existing=trainingPlans.find(x=>x.id===editingTrainingPlanId);const value={id:existing?existing.id:uid(),name,date,theme:document.getElementById('tp-theme').value,duration:Number(document.getElementById('tp-duration').value)||90,objective:document.getElementById('tp-objective').value.trim(),blocks,createdAt:existing?existing.createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};if(existing)trainingPlans[trainingPlans.indexOf(existing)]=value;else trainingPlans.push(value);if(await saveTrainingPlans()){editingTrainingPlanId=null;showToast('Training session saved');renderTrainingPlanner();}};
+    const cancel=document.getElementById('tp-cancel');if(cancel)cancel.onclick=()=>{editingTrainingPlanId=null;renderTrainingPlanner();};
+    document.querySelectorAll('[data-edit-plan]').forEach(b=>b.onclick=()=>{editingTrainingPlanId=b.getAttribute('data-edit-plan');window.scrollTo(0,0);renderTrainingPlanner();});
+    document.querySelectorAll('[data-copy-plan]').forEach(b=>b.onclick=async()=>{const p=trainingPlans.find(x=>x.id===b.getAttribute('data-copy-plan'));if(!p)return;trainingPlans.push({...JSON.parse(JSON.stringify(p)),id:uid(),name:p.name+' Copy',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});await saveTrainingPlans();renderTrainingPlanner();});
+    document.querySelectorAll('[data-delete-plan]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this training plan?'))return;trainingPlans=trainingPlans.filter(x=>x.id!==b.getAttribute('data-delete-plan'));await saveTrainingPlans();renderTrainingPlanner();});
+    const sd=document.getElementById('save-drill');if(sd)sd.onclick=async()=>{const name=document.getElementById('drill-name').value.trim();if(!name){showToast('Add a drill name');return;}drillLibrary.push({id:uid(),name,category:document.getElementById('drill-category').value,duration:Number(document.getElementById('drill-duration').value)||15,objective:document.getElementById('drill-objective').value.trim(),notes:document.getElementById('drill-notes').value.trim(),createdAt:new Date().toISOString()});await saveDrillLibrary();showToast('Drill saved');renderTrainingPlanner();};
+    document.querySelectorAll('[data-add-drill-plan]').forEach(b=>b.onclick=()=>{const d=drillLibrary.find(x=>x.id===b.getAttribute('data-add-drill-plan'));if(!d)return;const draft={id:null,name:'',date:'',theme:d.category,duration:90,objective:d.objective,blocks:[{title:d.name,duration:d.duration,notes:d.notes}]};editingTrainingPlanId=null;trainingView='plans';renderTrainingPlanner();const n=document.getElementById('tp-name');document.getElementById('tp-theme').value=d.category;document.getElementById('tp-objective').value=d.objective||'';document.getElementById('tp-blocks').innerHTML=sessionBlockHtml(draft.blocks[0],0);if(n)n.focus();attachTrainingHandlers();});
+    document.querySelectorAll('[data-delete-drill]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this drill?'))return;drillLibrary=drillLibrary.filter(x=>x.id!==b.getAttribute('data-delete-drill'));await saveDrillLibrary();renderTrainingPlanner();});
+    const sr=document.getElementById('save-review');if(sr)sr.onclick=async()=>{const eventId=document.getElementById('review-match').value;if(!eventId){showToast('Choose a match');return;}matchReviews.push({id:uid(),eventId,good:document.getElementById('review-good').value.trim(),improve:document.getElementById('review-improve').value.trim(),notes:document.getElementById('review-notes').value.trim(),createdAt:new Date().toISOString()});await saveMatchReviews();showToast('Match review saved');renderTrainingPlanner();};
+    document.querySelectorAll('[data-delete-review]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this match review?'))return;matchReviews=matchReviews.filter(x=>x.id!==b.getAttribute('data-delete-review'));await saveMatchReviews();renderTrainingPlanner();});
+  }
   let deferredInstallPrompt = null;
   const isStandaloneApp = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   const isIosDevice = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
@@ -1447,6 +1548,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     document.getElementById('dashboard-content').style.display = role === 'coach' && activeTab === 'dashboard' ? 'block' : 'none';
     document.getElementById('selection-content').style.display = role === 'coach' && activeTab === 'selection' ? 'block' : 'none';
     document.getElementById('stats-content').style.display = role === 'coach' && activeTab === 'stats' ? 'block' : 'none';
+    document.getElementById('training-planner-content').style.display = role === 'coach' && activeTab === 'training-planner' ? 'block' : 'none';
     document.getElementById('history-content').style.display = activeTab === 'history' ? 'block' : 'none';
     document.getElementById('options-content').style.display = activeTab === 'options' ? 'block' : 'none';
     document.getElementById('polls-content').style.display = activeTab === 'polls' ? 'block' : 'none';
@@ -1457,6 +1559,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     if(role === 'coach'){ renderRosterChips(); renderCoachRosterChips(); }
     if(role === 'coach' && activeTab === 'dashboard'){await renderDashboard();return;}
     if(role === 'coach' && activeTab === 'stats'){await renderStats();return;}
+    if(role === 'coach' && activeTab === 'training-planner'){renderTrainingPlanner();return;}
     if(role === 'coach' && activeTab === 'selection') await renderSelection();
     if(activeTab === 'history'){
       await renderHistory();
@@ -2528,6 +2631,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadCoachRoster();
     await loadPolls();
     await loadNews();
+    await loadTrainingTools();
     await Promise.all(events.filter(e => !isHistoryEvent(e)).map(ev => loadRsvp(ev.id)));
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     if(openEventId){
@@ -2561,6 +2665,7 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     await loadEvents();
     await loadPolls();
     await loadNews();
+    await loadTrainingTools();
     await Promise.all(events.filter(e => !isHistoryEvent(e)).map(ev => loadRsvp(ev.id)));
     await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
     loaded = true;
