@@ -673,7 +673,7 @@
       <div class="options-title">Install App</div>
       <div class="options-copy" id="install-app-copy">Install Boyne RFC U13 on this device for faster access and an app-style experience.</div>
       <button class="calendar-btn" id="install-app-btn" type="button" style="display:none;width:100%;padding:10px;">📱 Install App</button>
-      <div class="options-status" id="install-app-status">Checking installation availability…</div>
+      <div class="options-status" id="install-app-status">On iPhone: open in Safari, tap Share, then Add to Home Screen.</div>
     </div>
   </div>
 
@@ -1460,9 +1460,13 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   }
   let deferredInstallPrompt = null;
   const isStandaloneApp = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const isIosDevice = () =>
-    /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
-    (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
+  const isIosDevice = () => {
+    const ua = window.navigator.userAgent || '';
+    const platform = window.navigator.platform || '';
+    return /iphone|ipad|ipod/i.test(ua) ||
+      (platform === 'MacIntel' && window.navigator.maxTouchPoints > 1) ||
+      (/Macintosh/i.test(ua) && window.navigator.maxTouchPoints > 1);
+  };
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
     deferredInstallPrompt = event;
@@ -1477,7 +1481,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   function renderOptions(){
     const button = document.getElementById('notifications-off-btn');
     const status = document.getElementById('options-notification-status');
-    const enabled = Notification.permission === 'granted' && !!localStorage.getItem('boyneFCMToken');
+    const enabled = ('Notification' in window) && Notification.permission === 'granted' && !!localStorage.getItem('boyneFCMToken');
     button.disabled = !enabled;
     button.textContent = enabled ? '🔕 Turn Off Notifications' : 'Notifications Are Off';
     status.textContent = enabled ? 'Push notifications are enabled on this device.' : 'Push notifications are currently off on this device.';
