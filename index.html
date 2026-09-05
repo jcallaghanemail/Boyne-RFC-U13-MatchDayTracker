@@ -1502,8 +1502,12 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
       installButton.style.display='none';
       installButton.disabled=false;
       if(isStandaloneApp()){
-        installCopy.textContent='Boyne RFC U13 is installed on this device.';
-        installStatus.textContent='✅ App already installed';
+        installCard.innerHTML=`
+          <div class="options-title">App Status</div>
+          <div class="options-copy">✅ Boyne RFC U13 is installed on this iPhone.</div>
+          <div class="options-status">Opened from the Home Screen</div>
+        `;
+        return;
       }else if(deferredInstallPrompt){
         installCopy.textContent='Install Boyne RFC U13 on this device for faster access and an app-style experience.';
         installButton.style.display='inline-flex';
@@ -1523,7 +1527,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   installCopy.innerHTML=`
     <strong>📱 Install Boyne RFC U13</strong><br><br>
     <strong>iPhone / iPad</strong><br>
-    1. Tap the Share icon at the bottom of Safari<br>
+    1. Tap the Share icon in Safari<br>
     2. Scroll down and tap <strong>Add to Home Screen</strong><br>
     3. Tap <strong>Add</strong><br><br>
     The app will appear on your Home Screen and can then receive notifications.
