@@ -1460,7 +1460,9 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
   }
   let deferredInstallPrompt = null;
   const isStandaloneApp = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  const isIosDevice = () => /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  const isIosDevice = () =>
+    /iphone|ipad|ipod/i.test(window.navigator.userAgent) ||
+    (window.navigator.platform === 'MacIntel' && window.navigator.maxTouchPoints > 1);
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
     deferredInstallPrompt = event;
@@ -1513,16 +1515,16 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
           renderOptions();
         };
 }else if(isIosDevice()){
+  installButton.style.display='none';
   installCopy.innerHTML=`
-    <strong>📱 Install Boyne RFC App</strong><br><br>
+    <strong>📱 Install Boyne RFC U13</strong><br><br>
     <strong>iPhone / iPad</strong><br>
-    1. Open this app in Safari<br>
-    2. Tap the Share button (□↑)<br>
-    3. Tap Add to Home Screen<br>
-    4. Tap Add<br><br>
-    The app will then appear on your Home Screen just like a normal app.
+    1. Tap the Share icon at the bottom of Safari<br>
+    2. Scroll down and tap <strong>Add to Home Screen</strong><br>
+    3. Tap <strong>Add</strong><br><br>
+    The app will appear on your Home Screen and can then receive notifications.
   `;
-  installStatus.textContent='Safari installation instructions';
+  installStatus.textContent='Ready for iPhone installation';
 }else{
   installCopy.innerHTML=`
     <strong>📱 Install Boyne RFC App</strong><br><br>
