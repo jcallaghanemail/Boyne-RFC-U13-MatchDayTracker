@@ -2734,18 +2734,31 @@ This permanently removes this history record and its RSVPs, attendance, score, c
   }
 
   (async function init(){
-    await loadRoster();
-    await loadCoachRoster();
-    await loadLastChildName();
-    await loadLastCoachName();
-    await loadEvents();
-    await loadPolls();
-    await loadNews();
-    await loadTrainingTools();
-    await Promise.all(events.filter(e => !isHistoryEvent(e)).map(ev => loadRsvp(ev.id)));
-    await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
+    // These six are independent of one another — fire them together instead
+    // of waiting for each network round trip before starting the next.
+    await Promise.all([
+      loadRoster(),
+      loadCoachRoster(),
+      loadEvents(),
+      loadPolls(),
+      loadNews(),
+      loadTrainingTools()
+    ]);
+    // These two only need the rosters, which just finished above.
+    await Promise.all([loadLastChildName(), loadLastCoachName()]);
+
+    // Paint the schedule now rather than waiting on every event's RSVP/score
+    // fetch first — those get filled in a moment later and trigger a
+    // second, cheap re-render.
     loaded = true;
     await render();
+
+    await Promise.all([
+      ...events.filter(e => !isHistoryEvent(e)).map(ev => loadRsvp(ev.id)),
+      ...events.filter(e => e.type === 'match').map(ev => loadScore(ev.id))
+    ]);
+    await render();
+
     const signedInCoach=window.boyneAuthReady?await window.boyneAuthReady:null;
     if(signedInCoach && PORTAL_MODE !== 'parent'){
       setPortalMode('coach');
