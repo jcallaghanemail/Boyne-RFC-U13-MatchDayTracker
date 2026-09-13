@@ -14,11 +14,17 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(payload => {
-  const title = payload.notification?.title || 'Boyne RFC U13';
+  const d = payload.data || {};
+  const title = d.title || 'Boyne RFC U13';
   const options = {
-    body: payload.notification?.body || 'New team update',
-    data: payload.data || {},
-    tag: payload.data?.tag || undefined
+    body: d.body || 'New team update',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: d,
+    // Match the foreground handler in index.html so a repeat update about the
+    // same fixture/poll/post replaces the earlier notification instead of
+    // stacking a new one in the tray.
+    tag: d.tag || d.eventId || d.pollId || d.newsId || undefined
   };
   self.registration.showNotification(title, options);
 });
