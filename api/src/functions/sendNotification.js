@@ -15,10 +15,20 @@ app.http('send-notification', {
     let sent=0,failed=0;
     for(let i=0;i<tokens.length;i+=500){
       const batch=tokens.slice(i,i+500);
+      const title=String(body.title).slice(0,120);
+      const messageBody=String(body.body).slice(0,240);
       const result=await firebaseMessaging().sendEachForMulticast({
         tokens:batch,
-        notification:{title:String(body.title).slice(0,120),body:String(body.body).slice(0,240)},
-        data:Object.fromEntries(Object.entries(body.data||{}).map(([k,v])=>[k,String(v)])),
+        // Data-only (no top-level `notification` field): if a notification
+        // field is present, the FCM web SDK auto-displays it for background/
+        // closed tabs and skips our onBackgroundMessage handler, so our tag/
+        // icon/click-link logic never runs in that case. Sending data-only
+        // means our own JS handles display every time, consistently.
+        data:{
+          title,
+          body:messageBody,
+          ...Object.fromEntries(Object.entries(body.data||{}).map(([k,v])=>[k,String(v)]))
+        },
         webpush:{fcmOptions:{link:(body.data&&body.data.url)||'/?portal=parent'}}
       });
       sent+=result.successCount; failed+=result.failureCount;
