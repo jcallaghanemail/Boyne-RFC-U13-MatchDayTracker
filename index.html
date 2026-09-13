@@ -322,7 +322,7 @@
   .sb-status{display:block; margin-top:2px; font-size:9px; opacity:0.7;}
 
   .scorelog{font-size:12px; color:var(--ink-soft); margin-bottom:14px;}
-  .scorelog-item{display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--line);}
+  .scorelog-item{display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--line);gap:6px}.scorelog-actions button{margin-left:4px;border:1px solid var(--line);background:#fff;border-radius:4px;font-size:10px;cursor:pointer}
   .scorelog-empty{font-style:italic; opacity:0.7; padding:6px 0;}
 
   .coach-score-controls{margin-bottom:14px;}
@@ -1675,7 +1675,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
           </div>
           <div class="scorelog">
             ${sc.log.length === 0 ? '<div class="scorelog-empty">No scoring yet</div>' :
-              sc.log.slice().reverse().map(l => `<div class="scorelog-item"><span>${LABELS[l.type]} — ${l.scorer ? escapeHtml(l.scorer) : (l.team === 'home' ? escapeHtml(sc.homeName) : escapeHtml(sc.awayName))}${typeof l.matchSeconds === 'number' ? ` · ${Math.floor(l.matchSeconds/60)}'` : ''}</span><span>+${POINTS[l.type]}</span></div>`).join('')}
+              sc.log.slice().reverse().map((l,idx) => `<div class="scorelog-item"><span>${LABELS[l.type]} — ${l.scorer ? escapeHtml(l.scorer) : (l.team === 'home' ? escapeHtml(sc.homeName) : escapeHtml(sc.awayName))}${typeof l.matchSeconds === 'number' ? ` · ${Math.floor(l.matchSeconds/60)}'` : ''}</span><span><strong>+${POINTS[l.type]}</strong><span class="scorelog-actions">${role==='coach'?`<button data-edit-score="${ev.id}|${sc.log.length-1-idx}">Edit</button><button data-delete-score="${ev.id}|${sc.log.length-1-idx}">Del</button>`:''}</span></span></div>`).join('')}
           </div>
           ${scorerSummaryHtml(sc)}
           `;
@@ -2224,7 +2224,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
         await render();
       });
     });
-    document.querySelectorAll('[data-save-result]').forEach(btn => {
+    
+    document.querySelectorAll('[data-delete-score]').forEach(btn=>{btn.addEventListener('click',async e=>{e.stopPropagation();const [evId,idx]=btn.getAttribute('data-delete-score').split('|');const sc=scoreCache[evId];const item=sc.log[Number(idx)];if(!item)return;if(!confirm('Delete score event?'))return;sc[item.team]-=(POINTS[item.type]||0);sc.log.splice(Number(idx),1);await saveScore(evId);await render();});});
+    document.querySelectorAll('[data-edit-score]').forEach(btn=>{btn.addEventListener('click',async e=>{e.stopPropagation();const [evId,idx]=btn.getAttribute('data-edit-score').split('|');const sc=scoreCache[evId];const item=sc.log[Number(idx)];if(!item)return;const scorer=prompt('Scorer name',item.scorer||'');if(scorer===null)return;item.scorer=scorer;await saveScore(evId);await render();});});
+document.querySelectorAll('[data-save-result]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         if(role !== 'coach') return;
