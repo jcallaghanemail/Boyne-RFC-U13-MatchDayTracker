@@ -2226,11 +2226,7 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     });
     
     document.querySelectorAll('[data-delete-score]').forEach(btn=>{btn.addEventListener('click',async e=>{e.stopPropagation();const [evId,idx]=btn.getAttribute('data-delete-score').split('|');const sc=scoreCache[evId];const item=sc.log[Number(idx)];if(!item)return;if(!confirm('Delete score event?'))return;sc[item.team]-=(POINTS[item.type]||0);sc.log.splice(Number(idx),1);await saveScore(evId);await render();});});
-    document.querySelectorAll('[data-edit-score]').forEach(btn=>{btn.addEventListener('click',async e=>{e.stopPropagation();const [evId,idx]=btn.getAttribute('data-edit-score').split('|');const sc=scoreCache[evId];const item=sc.log[Number(idx)];if(!item)return;const team=teamCache[evId]||await loadTeam(evId);const players=[...new Set([...(Object.values(team.positions||{})),...(team.subs||[]),...roster].filter(Boolean))].sort();if(!players.length){showToast('No players available');return;}const current=item.scorer||'';const choice=prompt('Choose player by number:
-'+players.map((p,i)=>(i+1)+'. '+p).join('
-')+'
-
-Current: '+current, current?String(players.indexOf(current)+1):'');if(choice===null)return;const n=parseInt(choice,10);if(!n||n<1||n>players.length){showToast('Invalid selection');return;}item.scorer=players[n-1];await saveScore(evId);await render();});});
+    document.querySelectorAll('[data-edit-score]').forEach(btn=>{btn.addEventListener('click',async e=>{e.stopPropagation();const [evId,idx]=btn.getAttribute('data-edit-score').split('|');const sc=scoreCache[evId];const item=sc.log[Number(idx)];if(!item)return;const team=teamCache[evId]||await loadTeam(evId);const players=[...new Set([...(Object.values(team.positions||{})),...(team.subs||[]),...roster].filter(Boolean))].sort();if(!players.length){showToast('No players available');return;}const current=item.scorer||'';const choice=prompt('Choose player by number\n\n'+players.map((p,i)=>(i+1)+'. '+p).join('\n')+'\n\nCurrent: '+current, current?String(players.indexOf(current)+1):'');if(choice===null)return;const n=parseInt(choice,10);if(!n||n<1||n>players.length){showToast('Invalid selection');return;}item.scorer=players[n-1];await saveScore(evId);await render();});});
 document.querySelectorAll('[data-save-result]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
