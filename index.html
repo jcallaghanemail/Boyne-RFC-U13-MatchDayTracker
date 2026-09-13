@@ -724,7 +724,26 @@ async function setup(){
    }
  };
  button.onclick=async()=>{try{button.disabled=true;status.textContent='Enabling notifications…';if(await Notification.requestPermission()!=='granted')throw new Error('Permission not granted');const token=await getToken(messaging,{vapidKey,serviceWorkerRegistration:sw});if(!token)throw new Error('No token returned');const requestedRole=new URLSearchParams(location.search).get('portal');const portalRole=requestedRole==='coach'&&auth.currentUser?'coach':'parent';localStorage.setItem('boyneFCMToken',token);localStorage.setItem('boyneFCMRole',portalRole);const r=await fetch('/api/register-device',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,role:portalRole})});if(!r.ok)throw new Error(await r.text());console.log('Boyne FCM token:',token);state('Notifications are enabled',true);}catch(e){console.error(e);state('Could not enable notifications');button.disabled=false;}};
- onMessage(messaging,p=>window.dispatchEvent(new CustomEvent('boyne-notification',{detail:{title:p.notification?.title||'Boyne RFC U13',body:p.notification?.body||'New team update'}})));
+ onMessage(messaging,p=>{
+   const d=p.data||{};
+   const title=d.title||'Boyne RFC U13';
+   const body=d.body||'New team update';
+   // Foreground messages never trigger a native notification on their own —
+   // Firebase only auto-shows one when the tab is backgrounded/closed and the
+   // service worker's background handler fires. So while the tab is open we
+   // ask the same service worker registration to show a real OS notification
+   // here, in addition to the in-app toast.
+   if(sw && Notification.permission==='granted'){
+     sw.showNotification(title,{
+       body,
+       icon:'/icon-192.png',
+       badge:'/icon-192.png',
+       data:d,
+       tag:d.tag||d.eventId||d.pollId||d.newsId||undefined
+     }).catch(e=>console.warn('Foreground notification failed',e));
+   }
+   window.dispatchEvent(new CustomEvent('boyne-notification',{detail:{title,body}}));
+ });
  if(Notification.permission==='granted'&&localStorage.getItem('boyneFCMToken'))state('Notifications are enabled',true);
 }
 setup().catch(e=>{console.error(e);state('Could not initialise notifications')});
