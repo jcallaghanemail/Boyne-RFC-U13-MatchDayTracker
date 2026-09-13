@@ -1619,6 +1619,10 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const upcoming = events.filter(e => !isHistoryEvent(e));
     let html = '';
     if(upcoming.length){
+      // Load every card's RSVP/checkin/score/team data up front, in parallel,
+      // instead of letting each renderCard() call fetch its own data one
+      // event at a time as the loop reaches it.
+      await Promise.all(upcoming.map(ensureEventData));
       html += `<div class="section-label">Next Up</div><div class="pitch-rule"></div><div class="list">`;
       for(const ev of upcoming) html += await renderCard(ev);
       html += `</div>`;
@@ -2026,11 +2030,12 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     const matches = events.filter(e => e.type === 'match' && !isHistoryEvent(e));
     if(!matches.length){ el.innerHTML = `<div class="empty-state"><div class="big">No match fixtures</div><div>Add a match in Fixtures before selecting a team.</div></div>`; return; }
     let html = `<div class="section-label" style="margin:4px 0 12px;"><span class="num">•</span> Team Selection</div>`;
+    await Promise.all(matches.map(ensureEventData));
     for(const ev of matches){
-      const team = teamCache[ev.id] || await loadTeam(ev.id);
-      const rs = rsvpCache[ev.id] || await loadRsvp(ev.id);
-      const coachRs = coachRsvpCache[ev.id] || await loadCoachRsvp(ev.id);
-      const checkins = checkinCache[ev.id] || await loadCheckin(ev.id);
+      const team = teamCache[ev.id];
+      const rs = rsvpCache[ev.id];
+      const coachRs = coachRsvpCache[ev.id];
+      const checkins = checkinCache[ev.id];
       const attendingCoaches = coachRoster.filter(n => coachRs[n] && coachRs[n].status === 'going');
       team.assistantCoaches = (team.assistantCoaches || []).filter(n => attendingCoaches.includes(n) && n !== team.leadCoach);
       if(team.leadCoach && !attendingCoaches.includes(team.leadCoach)) team.leadCoach = '';
@@ -2723,33 +2728,36 @@ This permanently removes this history record and its RSVPs, attendance, score, c
     const pollEditorActive = activeTab === 'polls' && role === 'coach' && (document.activeElement?.id === 'poll-question' || document.activeElement?.id === 'poll-options');
     const newsEditorActive=activeTab==='news'&&role==='coach'&&['news-title-input','news-body-input'].includes(document.activeElement?.id);
     if(pollEditorActive||newsEditorActive||newsOperationActive)return;
-    await loadEvents();
-    await loadRoster();
-    await loadCoachRoster();
-    await loadPolls();
-    await loadNews();
-    await loadTrainingTools();
-    await Promise.all(events.filter(e => !isHistoryEvent(e)).map(ev => loadRsvp(ev.id)));
-    await Promise.all(events.filter(e => e.type === 'match').map(ev => loadScore(ev.id)));
+    await Promise.all([
+      loadEvents(),
+      loadRoster(),
+      loadCoachRoster(),
+      loadPolls(),
+      loadNews(),
+      loadTrainingTools()
+    ]);
+    await Promise.all([
+      ...events.filter(e => !isHistoryEvent(e)).map(ev => loadRsvp(ev.id)),
+      ...events.filter(e => e.type === 'match').map(ev => loadScore(ev.id))
+    ]);
     if(openEventId){
       const ev = events.find(e => e.id === openEventId);
       if(ev){
-        await loadRsvp(openEventId);
-        await loadCoachRsvp(openEventId);
-        await loadCheckin(openEventId);
-        if(ev.type === 'match'){
-          await loadScore(openEventId);
-          await loadTeam(openEventId);
-        }
+        await Promise.all([
+          loadRsvp(openEventId),
+          loadCoachRsvp(openEventId),
+          loadCheckin(openEventId),
+          ...(ev.type === 'match' ? [loadScore(openEventId), loadTeam(openEventId)] : [])
+        ]);
       }
     }
     if(role === 'coach' && (activeTab === 'selection' || activeTab === 'dashboard' || activeTab === 'stats')){
-      for(const ev of events.filter(e => e.type === 'match')){
-        await loadRsvp(ev.id);
-        await loadCoachRsvp(ev.id);
-        await loadTeam(ev.id);
-        await loadCheckin(ev.id);
-      }
+      await Promise.all(events.filter(e => e.type === 'match').map(ev => Promise.all([
+        loadRsvp(ev.id),
+        loadCoachRsvp(ev.id),
+        loadTeam(ev.id),
+        loadCheckin(ev.id)
+      ])));
     }
     await render();
   }
