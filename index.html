@@ -2226,7 +2226,63 @@ setup().catch(e=>{console.error(e);state('Could not initialise notifications')})
     });
     
     document.querySelectorAll('[data-delete-score]').forEach(btn=>{btn.addEventListener('click',async e=>{e.stopPropagation();const [evId,idx]=btn.getAttribute('data-delete-score').split('|');const sc=scoreCache[evId];const item=sc.log[Number(idx)];if(!item)return;if(!confirm('Delete score event?'))return;sc[item.team]-=(POINTS[item.type]||0);sc.log.splice(Number(idx),1);await saveScore(evId);await render();});});
-    document.querySelectorAll('[data-edit-score]').forEach(btn=>{btn.addEventListener('click',async e=>{e.stopPropagation();const [evId,idx]=btn.getAttribute('data-edit-score').split('|');const sc=scoreCache[evId];const item=sc.log[Number(idx)];if(!item)return;const team=teamCache[evId]||await loadTeam(evId);const players=[...new Set([...(Object.values(team.positions||{})),...(team.subs||[]),...roster].filter(Boolean))].sort();if(!players.length){showToast('No players available');return;}const current=item.scorer||'';const choice=prompt('Choose player by number\n\n'+players.map((p,i)=>(i+1)+'. '+p).join('\n')+'\n\nCurrent: '+current, current?String(players.indexOf(current)+1):'');if(choice===null)return;const n=parseInt(choice,10);if(!n||n<1||n>players.length){showToast('Invalid selection');return;}item.scorer=players[n-1];await saveScore(evId);await render();});});
+    document.querySelectorAll('[data-edit-score]').forEach(btn=>{
+      btn.addEventListener('click',async e=>{
+        e.stopPropagation();
+        const [evId,idx]=btn.getAttribute('data-edit-score').split('|');
+        const sc=scoreCache[evId];
+        const item=sc&&sc.log[Number(idx)];
+        if(!item)return;
+        const team=teamCache[evId]||await loadTeam(evId);
+        const players=[...new Set([...(Object.values(team.positions||{})),...(team.subs||[]),...roster].filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+        if(!players.length){showToast('No players available in the squad');return;}
+
+        document.getElementById('edit-scorer-overlay')?.remove();
+        const overlay=document.createElement('div');
+        overlay.id='edit-scorer-overlay';
+        overlay.style.cssText='position:fixed;inset:0;background:rgba(8,20,15,.78);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        const card=document.createElement('div');
+        card.style.cssText='width:100%;max-width:390px;background:var(--card);border-radius:14px;padding:20px;border:1px solid var(--line);box-shadow:0 18px 55px rgba(0,0,0,.35);';
+        const title=document.createElement('div');
+        title.textContent='Edit scorer';
+        title.style.cssText="font-family:'Oswald';font-size:21px;font-weight:700;color:var(--pitch-deep);margin-bottom:12px;";
+        const label=document.createElement('label');
+        label.textContent='Select player from squad';
+        label.style.cssText='display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--ink-soft);margin-bottom:5px;';
+        const select=document.createElement('select');
+        select.style.cssText='width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;background:#fff;font-family:inherit;font-size:14px;';
+        players.forEach(name=>{
+          const option=document.createElement('option');
+          option.value=name;
+          option.textContent=name;
+          option.selected=name===item.scorer;
+          select.appendChild(option);
+        });
+        if(!item.scorer||!players.includes(item.scorer))select.selectedIndex=0;
+        const actions=document.createElement('div');
+        actions.style.cssText='display:flex;gap:8px;margin-top:14px;';
+        const cancel=document.createElement('button');
+        cancel.type='button';cancel.textContent='Cancel';cancel.className='coach-login-cancel';cancel.style.flex='1';
+        const save=document.createElement('button');
+        save.type='button';save.textContent='Save scorer';save.className='primary-btn';save.style.cssText='flex:1;margin:0;';
+        const close=()=>overlay.remove();
+        cancel.onclick=close;
+        overlay.onclick=event=>{if(event.target===overlay)close();};
+        save.onclick=async()=>{
+          item.scorer=select.value;
+          save.disabled=true;
+          await saveScore(evId);
+          close();
+          showToast('Scorer updated to '+item.scorer);
+          await render();
+        };
+        actions.append(cancel,save);
+        card.append(title,label,select,actions);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+        select.focus();
+      });
+    });
 document.querySelectorAll('[data-save-result]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
